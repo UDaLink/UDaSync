@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UDaSync 设置</title>
+    <link rel="stylesheet" href="./base.css" />
+    <link rel="stylesheet" href="./options.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand">
+          <div class="logo">U</div>
+          <div>
+            <h1>UDaSync</h1>
+            <p class="tagline">坚果云书签同步</p>
+          </div>
+        </div>
+        <nav>
+          <button class="nav active" data-tab="connect">连接</button>
+          <button class="nav" data-tab="sync">同步</button>
+          <button class="nav" data-tab="devices">设备</button>
+          <button class="nav" data-tab="backups">备份</button>
+          <button class="nav" data-tab="recycle">回收站</button>
+          <button class="nav" data-tab="logs">日志</button>
+          <button class="nav" data-tab="about">关于</button>
+        </nav>
+        <div class="side-foot muted">v0.1.0 · WebDAV</div>
+      </aside>
+
+      <main>
+        <!-- 连接 -->
+        <section id="tab-connect" class="tab active">
+          <h2>连接坚果云</h2>
+          <p class="lead">UDaSync 使用坚果云提供的 WebDAV 服务存取书签，不需要 UDaSync 自己的账号。</p>
+
+          <div class="panel">
+            <h3>账号信息</h3>
+            <div class="status-line" id="connStatus" style="margin-bottom: 14px">
+              <span class="dot" id="connDot"></span><span id="connText">未连接</span>
+            </div>
+
+            <div class="field">
+              <label for="baseUrl">服务器地址</label>
+              <input id="baseUrl" type="url" placeholder="https://dav.jianguoyun.com/dav/" />
+            </div>
+            <div class="grid2">
+              <div class="field">
+                <label for="account">坚果云账号（邮箱）</label>
+                <input id="account" type="text" autocomplete="username" placeholder="you@example.com" />
+              </div>
+              <div class="field">
+                <label for="appPassword">应用密码</label>
+                <input id="appPassword" type="password" autocomplete="new-password" placeholder="坚果云后台生成的应用密码" />
+              </div>
+            </div>
+            <p class="note">
+              请使用坚果云「账户信息 → 安全选项 → 第三方应用管理」里生成的<strong>应用密码</strong>，不要填账号主密码。
+              应用密码可以随时单独吊销，主账号不受影响。凭证只保存在本机浏览器配置中。
+            </p>
+
+            <div class="actions" style="margin-top: 14px">
+              <button id="testBtn">测试连接</button>
+              <button id="saveBtn" class="primary">保存并连接</button>
+              <button id="disconnectBtn" class="ghost danger">断开并清除凭证</button>
+            </div>
+            <div id="connMsg" class="note hidden" style="margin-top: 12px"></div>
+          </div>
+
+          <div class="panel">
+            <h3>云端目录</h3>
+            <p class="muted" style="font-size: 12px">
+              书签快照保存在坚果云 WebDAV 根目录下的
+              <code class="mono" id="dirPath">/UDaSync/</code>，其中 <code class="mono">devices/</code> 每台设备一个文件，
+              <code class="mono">backups/</code> 保留最近 10 份自动备份。
+            </p>
+            <p class="note" style="margin-top: 10px">
+              注意：坚果云 WebDAV 只认真实 UTF-8 路径，浏览器会把中文路径做百分号编码导致 404，
+              因此云端目录名固定为 ASCII 的 <strong>UDaSync</strong>，请勿改成中文。
+            </p>
+          </div>
+        </section>
+
+        <!-- 同步 -->
+        <section id="tab-sync" class="tab">
+          <h2>同步</h2>
+          <p class="lead">整棵书签树参与同步：书签栏、其他书签、移动端书签。</p>
+
+          <div class="panel">
+            <div class="row"><span>同步状态</span><strong id="syncStatus">—</strong></div>
+            <div class="row"><span>上次同步</span><strong id="syncLast">—</strong></div>
+            <div class="row"><span>最近一次变更</span><strong id="syncCounts">—</strong></div>
+            <div class="row"><span>已连接设备</span><strong id="syncDevices">—</strong></div>
+            <div id="syncError" class="note hidden" style="margin-top: 12px; color: var(--danger)"></div>
+            <div class="actions">
+              <button id="syncNowBtn" class="primary">立即同步</button>
+              <button id="pauseBtn">暂停同步</button>
+            </div>
+          </div>
+
+          <div class="panel hidden" id="previewPanel">
+            <h3>首次同步预览</h3>
+            <p class="muted">云端已有其他设备的书签。确认后会先在本机书签栏创建一个「[本机备份]」文件夹，再执行合并。</p>
+            <div class="preview-list" id="previewList"></div>
+            <div class="actions">
+              <button id="confirmFirstBtn" class="primary">确认合并</button>
+              <button id="dismissPreviewBtn" class="ghost">暂不合并</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>重要前提</h3>
+            <p class="note">
+              请关闭 Chrome / Edge 自带的书签同步，否则两套同步引擎会互相覆盖。
+              在 <code class="mono">chrome://settings/syncSetup</code>（Edge 为 <code class="mono">edge://settings/profiles/sync</code>）里
+              把「书签」取消勾选。
+            </p>
+            <p class="note" style="margin-top: 10px">
+              同一坚果云账号下，建议一台电脑同时只让一个浏览器在线同步；Chrome 与 Edge 都装的话，
+              两边会各自同步并逐渐趋同，但不要指望它们实时一致。
+            </p>
+          </div>
+        </section>
+
+        <!-- 设备 -->
+        <section id="tab-devices" class="tab">
+          <h2>设备</h2>
+          <p class="lead">每台电脑上的每个浏览器配置文件算一台设备。</p>
+
+          <div class="panel">
+            <h3>本机名称</h3>
+            <div class="field">
+              <label for="deviceName">显示名称</label>
+              <input id="deviceName" type="text" maxlength="40" />
+            </div>
+            <div class="actions">
+              <button id="renameBtn">保存名称</button>
+              <button id="refreshDevicesBtn" class="ghost">刷新列表</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>已连接设备</h3>
+            <div id="deviceList"></div>
+          </div>
+        </section>
+
+        <!-- 备份 -->
+        <section id="tab-backups" class="tab">
+          <h2>云端备份</h2>
+          <p class="lead">每次同步前自动上传上一版书签树，保留最近 10 份。</p>
+          <div class="panel">
+            <div class="actions" style="margin-top: 0; margin-bottom: 12px">
+              <button id="refreshBackupsBtn">刷新</button>
+            </div>
+            <div id="backupList"></div>
+          </div>
+        </section>
+
+        <!-- 回收站 -->
+        <section id="tab-recycle" class="tab">
+          <h2>回收站</h2>
+          <p class="lead">同步过程中被删除的书签会在这里保留 7 天，可恢复到书签栏。</p>
+          <div class="panel">
+            <div class="actions" style="margin-top: 0; margin-bottom: 12px">
+              <button id="refreshRecycleBtn">刷新</button>
+            </div>
+            <div id="recycleList"></div>
+          </div>
+        </section>
+
+        <!-- 日志 -->
+        <section id="tab-logs" class="tab">
+          <h2>日志</h2>
+          <p class="lead">最近 200 条运行记录，排查同步问题时先看这里。</p>
+          <div class="panel">
+            <div class="actions" style="margin-top: 0; margin-bottom: 12px">
+              <button id="refreshLogsBtn">刷新</button>
+              <button id="clearLogsBtn" class="ghost">清空</button>
+            </div>
+            <div class="logbox" id="logList"></div>
+          </div>
+        </section>
+
+        <!-- 关于 -->
+        <section id="tab-about" class="tab">
+          <h2>关于 UDaSync</h2>
+          <p class="lead">一个只做一件事的扩展：把你的书签，通过你自己的坚果云，在多台电脑之间同步。</p>
+
+          <div class="panel">
+            <h3>设计要点</h3>
+            <div class="preview-list">
+              <div class="row"><span>同步范围</span><strong>整棵书签树</strong></div>
+              <div class="row"><span>冲突策略</span><strong>后写赢 + 墓碑 30 天 + 云端备份 10 份</strong></div>
+              <div class="row"><span>触发方式</span><strong>书签变动 5 秒防抖 + 启动拉取 + 每 10 分钟轮询</strong></div>
+              <div class="row"><span>数据位置</span><strong class="mono">/UDaSync/devices/&lt;设备&gt;.json.gz</strong></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>隐私</h3>
+            <p class="note">
+              UDaSync 不采集任何分析数据、不访问与书签无关的网页。所有网络请求只发往你自己的坚果云 WebDAV 地址
+              （默认 <code class="mono">https://dav.jianguoyun.com/dav/</code>）。书签内容只存在本机与你的坚果云账号里。
+            </p>
+          </div>
+
+          <div class="panel">
+            <h3>排查建议</h3>
+            <p class="note">
+              同步失败时依次检查：① 应用密码是否被吊销；② 坚果云免费版每月 1GB 上行流量是否用尽；
+              ③ 是否触发了 30 分钟 600 次请求限制（等待 30 分钟后自动恢复）；④ 是否有另一台设备正在同时写入。
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.local/
+.test-output/
+# 任何本地测试凭证/配置都不得入库
+*.credentials.json
+.env
+.env.*
+
+# 构建与本地工作产物
+release/
+design/
+*.zip

@@ -1,0 +1,44 @@
+{
+  "name": "udasyn",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "UDaSync - 基于坚果云 WebDAV 的浏览器书签同步扩展",
+  "license": "MIT",
+  "author": "UDaLink",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UDaLink/UDaSync.git"
+  },
+  "homepage": "https://github.com/UDaLink/UDaSync#readme",
+  "bugs": {
+    "url": "https://github.com/UDaLink/UDaSync/issues"
+  },
+  "keywords": [
+    "bookmarks",
+    "chrome-extension",
+    "edge-extension",
+    "webdav",
+    "jianguoyun",
+    "sync"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && npm run build:bg && npm run build:ui && npm run verify:dist",
+    "build:bg": "vite build --config vite.background.config.ts",
+    "build:ui": "vite build --config vite.ui.config.ts",
+    "verify:dist": "node scripts/verify-dist.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.11",
+    "vitest": "^3.2.4"
+  }
+}

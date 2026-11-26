@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "UDaSync — 书签同步",
+  "version": "0.1.0",
+  "description": "用坚果云 WebDAV 在多台电脑、多个浏览器之间同步书签。",
+  "minimum_chrome_version": "116",
+  "permissions": ["bookmarks", "storage", "alarms", "notifications"],
+  "host_permissions": ["https://dav.jianguoyun.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "UDaSync",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

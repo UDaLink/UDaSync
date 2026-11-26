@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UDaSync</title>
+    <link rel="stylesheet" href="./base.css" />
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <div class="logo">U</div>
+        <div>
+          <h1>UDaSync</h1>
+          <div class="sub" id="device">—</div>
+        </div>
+        <span class="dot" id="dot"></span>
+      </header>
+
+      <section id="unbound" class="card hidden">
+        <h2>尚未绑定坚果云</h2>
+        <p>绑定账号后即可在多台电脑间同步书签。需要先在坚果云后台生成一个「应用密码」。</p>
+        <div class="actions">
+          <button id="openOptions" class="primary">去绑定</button>
+        </div>
+      </section>
+
+      <section id="bound" class="card">
+        <div class="row"><span>状态</span><strong id="status">—</strong></div>
+        <div class="row"><span>上次同步</span><strong id="last">—</strong></div>
+        <div class="row"><span>最近一次变更</span><strong id="counts">—</strong></div>
+        <div class="row"><span>已连接设备</span><strong id="devices">—</strong></div>
+        <div id="error" class="error-box hidden"></div>
+        <div class="actions">
+          <button id="sync" class="primary">立即同步</button>
+          <button id="pause">暂停同步</button>
+          <button id="settings" class="ghost">设置</button>
+        </div>
+      </section>
+
+      <section id="preview" class="card hidden">
+        <h2>首次同步预览</h2>
+        <p>云端已有其他设备的书签。确认后将执行以下变更（会先备份本机书签）：</p>
+        <div id="previewBody"></div>
+        <div class="actions">
+          <button id="confirm" class="primary">确认合并</button>
+          <button id="cancel" class="ghost">取消</button>
+        </div>
+      </section>
+
+      <footer>v0.1.0 · 坚果云 WebDAV</footer>
+    </div>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>
