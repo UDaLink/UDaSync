@@ -100,7 +100,7 @@ npm run test:e2e
 ## 后续计划
 
 - OneDrive 存储适配（`StorageAdapter` 已预留，Graph API 走 `/me/drive/special/approot`）
-- 可选的本地加密口令（当前依赖操作系统账户与浏览器配置隔离）
+- 本地口令加密（v2 计划，当前依赖操作系统账户与浏览器配置隔离）
 - 书签栏以外的偏好同步（如是否显示书签栏）
 
 ## 隐私
