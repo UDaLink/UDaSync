@@ -47,7 +47,7 @@ describe('parseMultiStatus', () => {
 <multistatus xmlns="DAV:">
   <response><href>/dav/UDaSync/</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>
   <response><href>/dav/UDaSync/devices/</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>
-  <response><href>/dav/UDaSync/devices/d-1.json.gz</href><propstat><prop><getcontentlength>1024</getcontentlength><getlastmodified>Thu, 26 Nov 2026 13:37:48 GMT</d:getlastmodified><resourcetype/></prop><status>HTTP/1.1 200 OK</status></propstat></response>
+  <response><href>/dav/UDaSync/devices/d-1.json.gz</href><propstat><prop><getcontentlength>1024</getcontentlength><getlastmodified>Thu, 26 Nov 2026 13:37:48 GMT</getlastmodified><resourcetype/></prop><status>HTTP/1.1 200 OK</status></propstat></response>
 </multistatus>`;
     const entries = parseMultiStatus(plain, 'UDaSync');
     expect(entries.map((e) => e.name)).toEqual(['devices', 'd-1.json.gz']);
