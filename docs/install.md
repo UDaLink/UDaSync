@@ -2,12 +2,14 @@
 
 ## 1. 选择存储服务
 
-UDaSync 支持两种存储，二选一即可：
+UDaSync 支持四种存储，任选其一即可：
 
 - **坚果云 WebDAV**：只准备坚果云账号和应用密码，不需要额外注册云服务
+- **通用 WebDAV**：任意支持 Basic Auth 的 WebDAV 服务，例如 Nextcloud、Synology、InfiniCLOUD、Koofr
+- **123 云盘**：使用官方 WebDAV 挂载，需要 123 云盘 VIP 权益；账号与应用密码来自「第三方挂载」
 - **OneDrive（个人 Microsoft 账号）**：需要先按 [onedrive-setup.md](onedrive-setup.md) 注册一个 Entra 应用并拿到 client ID
 
-两者不能同时作为当前同步目标；切换不会删除另一边的云端数据。
+四者不能同时作为当前同步目标；切换不会删除另一边的云端数据。
 
 ### 1.1 准备坚果云应用密码
 
@@ -20,6 +22,31 @@ UDaSync 支持两种存储，二选一即可：
 ### 1.2 准备 OneDrive client ID
 
 按 [onedrive-setup.md](onedrive-setup.md) 创建 Entra 租户、注册应用并复制 Application (client) ID。只需要这一步，不需要 client secret，也不需要重定向 URI。
+
+### 1.3 准备通用 WebDAV
+
+确认服务商提供的是 **WebDAV**（不是私有 OpenAPI），并且使用 **Basic Auth**（用户名 + 密码/应用密码）。准备三样东西：
+
+1. WebDAV 根地址：通常以 `/webdav`、`/remote.php/dav/files/<用户名>/` 或 `/` 结尾
+2. 用户名
+3. 应用密码；优先使用服务商单独生成的密码，不要用主密码
+
+常见例子：
+
+- **Nextcloud**：`https://cloud.example.com/remote.php/dav/files/你的用户名/`
+- **Synology**：在套件中心安装 WebDAV Server，地址通常是 `https://nas.example.com:5006/`；建议只在内网或 VPN 内使用。
+
+通用 WebDAV 目前只支持 Basic Auth；只提供 Digest、OAuth 或私有签名的服务不在支持范围内。公网地址请使用 HTTPS。
+
+### 1.4 准备 123 云盘
+
+1. 登录 [123 云盘](https://www.123pan.com/)，进入「工具中心 → 第三方挂载 → WebDAV 授权管理」
+2. 点击「添加应用」，应用名填 `UDaSync`
+3. 选择授权文件夹；权限必须选「读写」，只读无法同步
+4. 生成后复制页面显示的**账号**和**应用密码**；应用密码不是登录主密码，可随时在后台吊销
+5. 服务器地址固定为 `https://webdav.123pan.cn/webdav`，扩展已内置，不需要手动填写
+
+> WebDAV 挂载属于 123 云盘 VIP 权益。123 云盘用户协议对长期、高频、持续性 WebDAV 自动化调用有保留；公开推荐或长期后台同步前，请先确认条款。
 
 ## 2. 安装扩展
 
@@ -67,7 +94,33 @@ npm run build
 4. 若云端为空：本机书签直接上传，并在书签栏生成 `[本机备份] 设备名 时间` 文件夹
 5. 若云端已有其他设备的数据：会出现**合并预览**（将新建/更新/移动/删除多少项），确认后才会写入
 
-### 3.2 用 OneDrive
+### 3.2 用通用 WebDAV
+
+1. 设置页「存储服务」选「通用 WebDAV」
+2. 填写：
+   - 服务器地址：例如 Nextcloud 的 `https://cloud.example.com/remote.php/dav/files/你的用户名/`
+   - 账号 / 用户名
+   - 应用密码 / 密码
+   - 云端目录：`UDaSync`（默认，必须是 ASCII）
+3. 点「测试连接」：浏览器会弹出授权，允许扩展访问你填写的域名；通过后根目录条目数会显示在下方
+4. 点「保存并连接」，通过后会自动做一次同步
+5. 若云端为空：本机书签直接上传，并在书签栏生成 `[本机备份] 设备名 时间` 文件夹
+6. 若云端已有其他设备的数据：会出现**合并预览**，确认后才会写入
+
+> 如果「测试连接」成功但保存失败，优先检查该 WebDAV 服务是否允许 `MKCOL` / `PUT` / `DELETE`，以及应用密码是否只有只读权限。
+
+### 3.3 用 123 云盘
+
+1. 设置页「存储服务」选「123 云盘」
+2. 服务器地址已固定为 `https://webdav.123pan.cn/webdav`，不用修改
+3. 填写「第三方挂载」页显示的**账号**与**应用密码**；云端目录默认 `UDaSync`
+4. 点「测试连接」：浏览器会请求访问 `https://webdav.123pan.cn/*` 的权限；通过后显示根目录条目数
+5. 点「保存并连接」，通过后会自动做一次同步
+6. 若云端已有其他设备的数据，同样先显示**合并预览**，确认后才写入
+
+> 如果返回 401，优先确认填的是第三方挂载页的账号和应用密码，而不是登录手机号/邮箱和主密码；应用权限必须是「读写」。如果页面没有 WebDAV 入口，先确认账号是否已开通所需 VIP 权益。
+
+### 3.4 用 OneDrive
 
 1. 设置页「存储服务」选「OneDrive」
 2. 粘贴 Entra 应用的 Application (client) ID，点「连接 OneDrive」
@@ -79,7 +132,7 @@ npm run build
 ## 4. 第二台电脑
 
 1. 同样安装扩展，选择与第一台相同的存储服务
-2. 坚果云：填同一个账号与应用密码；OneDrive：填同一个 client ID，并用自己的 Microsoft 账号完成设备代码登录
+2. 坚果云：填同一个账号与应用密码；通用 WebDAV：填同一个地址、账号与应用密码；123 云盘：填同一个第三方挂载账号与应用密码；OneDrive：填同一个 client ID，并用自己的 Microsoft 账号完成设备代码登录
 3. 首次同步同样先预览再确认；本机原有书签会先备份
 4. 完成后两端应完全一致；之后任意一端改动都会在数秒内推到云端，另一端最迟 10 分钟内拉取
 
@@ -105,7 +158,7 @@ npm run build
 
 **保存时提示 401**
 
-坚果云账号或应用密码不正确。注意应用密码不是登录密码；若刚重置过，需要重新生成。
+坚果云账号或应用密码不正确；通用 WebDAV 则可能是用户名/应用密码错误，或服务端要求 Digest/OAuth 而不是 Basic Auth；123 云盘则要确认填的是第三方挂载页的账号和应用密码，且应用权限为「读写」。注意应用密码不是登录密码；若刚重置过，需要重新生成。
 
 **OneDrive 提示 AADSTS16000 / AADSTS50020**
 
@@ -121,7 +174,11 @@ npm run build
 
 **提示 404 / 目录不存在**
 
-云端目录含中文或空格等非 ASCII 字符。坚果云只认真实 UTF-8 路径，请把目录改为 `UDaSync` 这类纯英文名。
+云端目录含中文或空格等非 ASCII 字符。坚果云只认真实 UTF-8 路径，请把目录改为 `UDaSync` 这类纯英文名。通用 WebDAV 还要确认地址是否填到了正确的根路径（Nextcloud 需要 `/remote.php/dav/files/<用户名>/`）。
+
+**测试连接时没有弹出授权，或提示需要授权**
+
+通用 WebDAV 使用可选主机权限。点「测试连接 / 保存并连接」时 Chrome 会弹出授权，选择允许；如果之前拒绝过，到 `chrome://extensions` → UDaSync →「详情」→「网站访问权限」里改为允许，或换一个地址重新触发。HTTP 地址只能在可信局域网使用。123 云盘首次连接也会请求 `https://webdav.123pan.cn/*` 的可选权限。
 
 **提示 503 / Too many requests**
 
@@ -157,4 +214,4 @@ npm test             # 单元测试
 npm run test:e2e     # 需要 JGY_ACCOUNT / JGY_PASSWORD
 ```
 
-产物校验脚本会检查 `manifest.json`、后台脚本、两个页面与图标是否齐全。E2E 使用 Chrome for Testing 启动两个独立 profile，验证真实坚果云往返。
+产物校验脚本会检查 `manifest.json`、后台脚本、两个页面与图标是否齐全。E2E 使用 Chrome for Testing 启动两个独立 profile，验证真实坚果云往返；通用 WebDAV 与 123 云盘暂未纳入自动化 E2E，需要手动准备服务器与凭证。
