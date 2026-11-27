@@ -2,8 +2,10 @@ import { sendMessage } from './common';
 
 interface State {
   config: {
-    provider: 'jianguoyun' | 'onedrive';
+    provider: 'jianguoyun' | 'webdav' | 'pan123' | 'onedrive';
     account: string;
+    webdavAccount: string;
+    pan123Account: string;
     oneDriveAccount: string;
     dir: string;
     oneDriveDir: string;
@@ -51,9 +53,22 @@ async function refresh() {
   const state = await sendMessage<State>({ type: 'GET_STATE' });
   if (!state?.ok) return;
   const s = state.data;
-  const providerLabel = s.config.provider === 'onedrive' ? 'OneDrive' : '坚果云';
-  const account = s.config.provider === 'onedrive' ? s.config.oneDriveAccount : s.config.account;
-  const dir = s.config.provider === 'onedrive' ? s.config.oneDriveDir : s.config.dir;
+  const provider = s.config.provider;
+  const providerLabel = provider === 'onedrive'
+    ? 'OneDrive'
+    : provider === 'pan123'
+      ? '123 云盘'
+      : provider === 'webdav'
+        ? 'WebDAV'
+        : '坚果云';
+  const account = provider === 'onedrive'
+    ? s.config.oneDriveAccount
+    : provider === 'pan123'
+      ? s.config.pan123Account
+      : provider === 'webdav'
+        ? s.config.webdavAccount
+        : s.config.account;
+  const dir = provider === 'onedrive' ? s.config.oneDriveDir : s.config.dir;
   $('device').textContent = `${s.config.deviceName} · ${providerLabel}${account ? ` · ${account}` : ''} · ${dir}`;
 
   if (!s.config.hasCredentials) {
