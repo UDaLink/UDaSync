@@ -7,6 +7,7 @@ import {
   ALARM_POLL,
   ALARM_RETRY,
   CHANGE_DEBOUNCE_MS,
+  PAN123_WEBDAV_URL,
   POLL_PERIOD_MINUTES,
   STORAGE_KEYS,
 } from '../shared/constants';
@@ -154,9 +155,17 @@ async function handleMessage(msg: Msg): Promise<unknown> {
       return testConnection(msg);
     case 'SAVE_CONFIG':
       return saveConnection(msg);
+    case 'WEBDAV_TEST_CONNECTION':
+      return testWebDavConnection(msg);
+    case 'WEBDAV_SAVE_CONFIG':
+      return saveWebDavConnection(msg);
+    case 'PAN123_TEST_CONNECTION':
+      return testPan123Connection(msg);
+    case 'PAN123_SAVE_CONFIG':
+      return savePan123Connection(msg);
     case 'SET_PROVIDER': {
       const provider = String(msg.provider ?? '') as StorageProvider;
-      if (provider !== 'jianguoyun' && provider !== 'onedrive') {
+      if (provider !== 'jianguoyun' && provider !== 'webdav' && provider !== 'pan123' && provider !== 'onedrive') {
         return { ok: false, error: '未知的存储服务' };
       }
       const cfg = await getConfig();
@@ -244,6 +253,9 @@ async function getState() {
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       account: cfg.account,
+      webdavUrl: cfg.webdavUrl,
+      webdavAccount: cfg.webdavAccount,
+      pan123Account: cfg.pan123Account,
       dir: cfg.dir,
       oneDriveClientId: cfg.oneDriveClientId,
       oneDriveAccount: cfg.oneDriveAccount,
@@ -255,6 +267,8 @@ async function getState() {
       connectedAt: cfg.connectedAt,
       hasCredentials: await hasCredentials(cfg),
       hasJianguoyunCredentials: Boolean(cfg.account && cfg.appPassword),
+      hasWebdavCredentials: Boolean(cfg.webdavUrl && cfg.webdavAccount && cfg.webdavPassword),
+      hasPan123Credentials: Boolean(cfg.pan123Account && cfg.pan123Password),
       hasOneDriveCredentials: Boolean(oneDriveTokens?.refreshToken),
     },
     stats,
@@ -346,6 +360,124 @@ async function saveConnection(msg: Msg): Promise<SyncResult> {
 
   const result = await runSync('manual', { apply: true });
   return result;
+}
+
+function parseWebdavBaseUrl(raw: string): { ok: true; url: string } | { ok: false; error: string } {
+  const baseUrl = raw.trim();
+  if (!baseUrl) return { ok: false, error: '服务器地址不能为空' };
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return { ok: false, error: '服务器地址不是合法的 URL' };
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    return { ok: false, error: '服务器地址必须以 http:// 或 https:// 开头' };
+  }
+  if (!url.hostname) return { ok: false, error: '服务器地址缺少域名或 IP' };
+  if (url.search || url.hash) {
+    return { ok: false, error: '服务器地址不要包含查询参数或锚点，只填 WebDAV 根路径' };
+  }
+  if (url.username || url.password) {
+    return { ok: false, error: '请不要把账号密码写进服务器地址，分别填到账号和应用密码' };
+  }
+  return { ok: true, url: baseUrl };
+}
+
+async function testWebDavConnection(msg: Msg) {
+  const parsed = parseWebdavBaseUrl(String(msg.baseUrl ?? ''));
+  if (!parsed.ok) return parsed;
+  const account = String(msg.account ?? '').trim();
+  const appPassword = String(msg.appPassword ?? '').trim();
+  if (!account || !appPassword) return { ok: false, error: '请填写完整的账号与应用密码' };
+  try {
+    const client = new WebDavClient({ baseUrl: parsed.url, account, appPassword });
+    const ping = await client.ping();
+    return { ok: true, entries: ping.entries.map((e: { name: string }) => e.name) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function saveWebDavConnection(msg: Msg): Promise<SyncResult> {
+  const parsed = parseWebdavBaseUrl(String(msg.baseUrl ?? ''));
+  if (!parsed.ok) return parsed;
+  const account = String(msg.account ?? '').trim();
+  const typedPassword = String(msg.appPassword ?? '').trim();
+  const cfg = await getConfig();
+  const appPassword = typedPassword || cfg.webdavPassword;
+
+  if (!account) return { ok: false, error: '账号不能为空' };
+  if (!appPassword) return { ok: false, error: '应用密码不能为空' };
+
+  const dir = typeof msg.dir === 'string' && msg.dir.trim() ? msg.dir.trim() : cfg.dir;
+  if (!/^[A-Za-z0-9._-]+$/.test(dir)) {
+    return { ok: false, error: '云端目录只能是 ASCII 字母、数字、点、下划线和短横线' };
+  }
+
+  const changed =
+    cfg.provider !== 'webdav' ||
+    parsed.url !== cfg.webdavUrl ||
+    account !== cfg.webdavAccount ||
+    appPassword !== cfg.webdavPassword ||
+    dir !== cfg.dir;
+  if (changed) await setUploadedHash(null);
+  await saveConfig({
+    provider: 'webdav',
+    webdavUrl: parsed.url,
+    webdavAccount: account,
+    webdavPassword: appPassword,
+    dir,
+    connectedAt: Date.now(),
+    ...(changed ? { firstRunDone: false } : {}),
+  });
+
+  return runSync('manual', { apply: true });
+}
+
+async function testPan123Connection(msg: Msg) {
+  const account = String(msg.account ?? '').trim();
+  const appPassword = String(msg.appPassword ?? '').trim();
+  if (!account || !appPassword) return { ok: false, error: '请填写 123 云盘账号与应用密码' };
+  try {
+    const client = new WebDavClient({ baseUrl: PAN123_WEBDAV_URL, account, appPassword });
+    const ping = await client.ping();
+    return { ok: true, entries: ping.entries.map((e: { name: string }) => e.name) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function savePan123Connection(msg: Msg): Promise<SyncResult> {
+  const account = String(msg.account ?? '').trim();
+  const typedPassword = String(msg.appPassword ?? '').trim();
+  const cfg = await getConfig();
+  const appPassword = typedPassword || cfg.pan123Password;
+
+  if (!account) return { ok: false, error: '123 云盘账号不能为空' };
+  if (!appPassword) return { ok: false, error: '123 云盘应用密码不能为空' };
+
+  const dir = typeof msg.dir === 'string' && msg.dir.trim() ? msg.dir.trim() : cfg.dir;
+  if (!/^[A-Za-z0-9._-]+$/.test(dir)) {
+    return { ok: false, error: '云端目录只能是 ASCII 字母、数字、点、下划线和短横线' };
+  }
+
+  const changed =
+    cfg.provider !== 'pan123' ||
+    account !== cfg.pan123Account ||
+    appPassword !== cfg.pan123Password ||
+    dir !== cfg.dir;
+  if (changed) await setUploadedHash(null);
+  await saveConfig({
+    provider: 'pan123',
+    pan123Account: account,
+    pan123Password: appPassword,
+    dir,
+    connectedAt: Date.now(),
+    ...(changed ? { firstRunDone: false } : {}),
+  });
+
+  return runSync('manual', { apply: true });
 }
 
 async function restoreRecycle(id: string) {
