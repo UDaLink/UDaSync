@@ -2,6 +2,40 @@
 
 所有重要变更都记录在此文件，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+
+- 新增第三个存储 provider「通用 WebDAV」，可填任意支持 Basic Auth 的 WebDAV 地址、账号与应用密码
+- 通用 WebDAV 使用独立的 `webdavUrl` / `webdavAccount` / `webdavPassword` 配置，不改动坚果云与 OneDrive 的字段和行为
+- 设置页新增独立「通用 WebDAV」面板、测试连接、保存并连接、断开并清除凭证
+- 新增 `optional_host_permissions`，在用户点击测试/保存时按所填域名请求主机权限
+- 新增 `WebDavAdapter` 与 provider 工厂、settings 隔离单元测试；WebDAV 解析测试补充大写 `D:` 与默认命名空间
+- 新增第四个存储 provider「123 云盘」，固定使用官方 WebDAV 入口 `https://webdav.123pan.cn/webdav`
+- 123 云盘使用独立的 `pan123Account` / `pan123Password`，不读取或不改写通用 WebDAV 的 `webdavUrl` / `webdavAccount` / `webdavPassword`
+- 设置页新增独立「123 云盘」面板、固定地址展示、测试连接、保存并连接、断开并清除凭证
+- 新增 `Pan123Adapter`（继承 `WebDavAdapter`），以及 123 云盘 provider/凭证隔离测试
+
+### Changed
+
+- manifest 描述、popup、README、安装/设计/隐私/自检文档补充通用 WebDAV 与 123 云盘
+- 设置页存储服务从三选一改为四选一，123 云盘与原有三套面板互斥
+- 未发布版本，`APP_VERSION` 与 `manifest.version` 仍为 `0.2.0`
+
+### Security
+
+- 通用 WebDAV 仅支持 Basic Auth；HTTP 地址会在 UI 中提示只建议在可信局域网使用
+- 123 云盘仅访问固定 HTTPS 入口，使用第三方挂载应用密码而不是登录主密码
+- 不申请安装时的全站权限，只按用户填写的域名或固定 123 域名请求可选主机权限
+- 通用 WebDAV 与 123 云盘凭证只保存在本机 `chrome.storage.local`，不会写入日志或快照
+
+### Verification
+
+- `npm run typecheck` 通过
+- `npm test` 通过（38 项）
+- `npm run build` 通过
+- 真实通用 WebDAV / 123 云盘服务器联调待完成（需要可用服务器、VIP 账号与凭证）
+
 ## [0.2.0] - 2026-11-27
 
 ### Added
