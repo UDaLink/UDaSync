@@ -35,4 +35,22 @@ describe('parseMultiStatus', () => {
     expect(entries[1]!.isDir).toBe(false);
     expect(entries[1]!.size).toBe(1024);
   });
+
+  it('兼容大写 D: 命名空间前缀（通用 WebDAV 服务器常见）', () => {
+    const upper = xml.replace(/<d:/g, '<D:').replace(/<\/d:/g, '</D:');
+    const entries = parseMultiStatus(upper, 'UDaSync');
+    expect(entries.map((e) => e.name)).toEqual(['devices', 'd-1.json.gz']);
+  });
+
+  it('兼容默认命名空间（无前缀）', () => {
+    const plain = `<?xml version="1.0"?>
+<multistatus xmlns="DAV:">
+  <response><href>/dav/UDaSync/</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>
+  <response><href>/dav/UDaSync/devices/</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>
+  <response><href>/dav/UDaSync/devices/d-1.json.gz</href><propstat><prop><getcontentlength>1024</getcontentlength><getlastmodified>Thu, 26 Nov 2026 13:37:48 GMT</d:getlastmodified><resourcetype/></prop><status>HTTP/1.1 200 OK</status></propstat></response>
+</multistatus>`;
+    const entries = parseMultiStatus(plain, 'UDaSync');
+    expect(entries.map((e) => e.name)).toEqual(['devices', 'd-1.json.gz']);
+    expect(entries[0]!.isDir).toBe(true);
+  });
 });
