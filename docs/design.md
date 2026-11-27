@@ -5,7 +5,7 @@
 **目标**
 
 - Chrome / Edge（Manifest V3）共用一套代码，同步整棵书签树，保留文件夹层级与顺序
-- 支持两种存储：坚果云 WebDAV 与个人 Microsoft OneDrive（Graph 应用专属文件夹）
+- 支持四种存储：坚果云 WebDAV、通用 WebDAV、123 云盘（固定 WebDAV）与个人 Microsoft OneDrive（Graph 应用专属文件夹）
 - 多设备自动合并：新增、改名、移动、删除均传播；冲突后写赢；误删可恢复
 - 首次绑定安全：先预览后写盘，并保留本机原树备份
 - 失败可诊断：结构化日志、状态角标、失败通知
@@ -27,7 +27,7 @@
                                            │              │
                                   chrome.bookmarks   StorageAdapter
                                            │              │
-                                     本地书签树      坚果云 WebDAV / OneDrive Graph
+                                     本地书签树      坚果云 / 通用 WebDAV / 123 云盘 / OneDrive Graph
 ```
 
 分层原则：
@@ -73,6 +73,22 @@ type BookmarkNode = {
    └─ 2026-11-26T14-30-00-000Z.json.gz   # 最多保留 10 份
 ```
 
+通用 WebDAV（用户填写的任意根路径）：
+
+```
+<WebDAV 根>/UDaSync/
+├─ devices/<deviceId>.json.gz
+└─ backups/<时间戳>.json.gz
+```
+
+123 云盘（固定 WebDAV 入口，实际根为用户在第三方挂载中授权的文件夹）：
+
+```
+https://webdav.123pan.cn/webdav/UDaSync/
+├─ devices/<deviceId>.json.gz
+└─ backups/<时间戳>.json.gz
+```
+
 OneDrive（Graph 应用专属文件夹）：
 
 ```
@@ -81,7 +97,7 @@ OneDrive（Graph 应用专属文件夹）：
 └─ backups/<时间戳>.json.gz
 ```
 
-两种存储的目录结构、快照格式完全一致，切换 provider 时同步引擎不需要改合并逻辑。
+四种存储的目录结构、快照格式完全一致，切换 provider 时同步引擎不需要改合并逻辑。
 
 快照结构：
 
@@ -204,7 +220,10 @@ interface StorageAdapter {
 }
 ```
 
-- `src/adapters/jianguoyun.ts`：WebDAV + 坚果云请求预算
+- `src/adapters/webdav.ts`：底层 WebDAV 客户端（PROPFIND / GET / PUT / MKCOL / DELETE，Basic Auth）
+- `src/adapters/jianguoyun.ts`：坚果云 WebDAV + 请求预算 + gzip 快照
+- `src/adapters/webdav-adapter.ts`：通用 WebDAV 适配器，复用坚果云的目录/gzip 逻辑但使用独立配置
+- `src/adapters/pan123.ts`：123 云盘适配器，继承通用 WebDAV 适配器并固定官方 WebDAV 入口
 - `src/adapters/onedrive.ts`：Microsoft Graph
 - `src/adapters/onedrive-auth.ts`：OAuth 设备代码流与 token 刷新
 - `src/adapters/factory.ts`：按 `config.provider` 构造对应适配器
@@ -223,15 +242,34 @@ OneDrive Graph：
 - token 过期用 refresh token 自动刷新；刷新后的 token 由 `onTokens` 回写 `chrome.storage.local`
 - 401 强制刷新一次；429 按 `Retry-After` 退避；5xx 重试一次
 
-界面层的「存储服务」选择器在设置页；`provider` 存在 `UdasynConfig`，默认 `jianguoyun`。
+界面层的「存储服务」选择器在设置页；`provider` 存在 `UdasynConfig`，默认 `jianguoyun`。新增 `webdav` provider 时，坚果云与 OneDrive 的字段、面板、消息处理都保持原样；通用 WebDAV 使用独立的 `webdavUrl` / `webdavAccount` / `webdavPassword`，不会覆盖原有配置。新增 `pan123` provider 时同样保持前三套不变：123 云盘使用 `pan123Account` / `pan123Password`，地址固定为 `https://webdav.123pan.cn/webdav`，不读取也不写入 `webdavUrl` / `webdavAccount` / `webdavPassword`。
+
+通用 WebDAV：
+
+- 协议：WebDAV（Basic Auth），复用 `WebDavClient` 的 `PROPFIND` / `GET` / `PUT` / `MKCOL` / `DELETE`
+- 不支持 Digest、OAuth 或需要私有签名的服务
+- 目录同样固定为 ASCII `UDaSync`
+- 请求预算沿用 `WebDavClient` 的 450 次 / 30 分钟本地预算
+- 服务器地址由用户填写；manifest 只声明 `optional_host_permissions`，设置页在用户点击时用 `chrome.permissions.request` 请求该主机的权限
+- 因为权限请求必须绑定用户手势，`chrome.permissions.request` 要在点击回调里同步发起，不能先 `await` 别的操作
+
+123 云盘：
+
+- 协议：123 云盘官方 WebDAV 挂载（Basic Auth），固定入口 `https://webdav.123pan.cn/webdav`
+- 账号与应用密码来自 123 云盘网页端「工具中心 → 第三方挂载 → WebDAV 授权管理」；应用密码不是登录主密码
+- 授权文件夹与「读写」权限在 123 云盘侧配置；UDaSync 只负责在该根下创建 `UDaSync/`
+- 适配器 `Pan123Adapter extends WebDavAdapter`，复用 `WebDavClient` 与 gzip/目录逻辑，但使用独立的 `pan123Account` / `pan123Password`
+- manifest 不新增 123 的必选 `host_permissions`；沿用 `optional_host_permissions`，设置页只请求 `https://webdav.123pan.cn/*`
+- WebDAV 是 123 云盘 VIP 权益；其用户协议对长期高频自动化调用有保留，产品文案不应把它描述为无限制服务
 
 ## 10. 安全模型
 
-- 凭证只存 `chrome.storage.local`：坚果云用 Basic Auth；OneDrive 只存 refresh token / access token
-- 不向任何第三方域名发请求；`host_permissions` 仅坚果云 WebDAV、Microsoft Graph/登录、OneDrive 下载域名
+- 凭证只存 `chrome.storage.local`：坚果云、通用 WebDAV 与 123 云盘用 Basic Auth；OneDrive 只存 refresh token / access token
+- 网络请求只发往用户选择的存储服务：坚果云 WebDAV、用户填写的通用 WebDAV、固定的 123 云盘 WebDAV 入口、Microsoft Graph/登录与 OneDrive 下载域名；通用 WebDAV 的目标主机在首次连接时由用户授权
+- `host_permissions` 仅坚果云 WebDAV、Microsoft Graph/登录、OneDrive 下载域名；通用 WebDAV 与 123 云盘使用 `optional_host_permissions`，安装时不申请全站权限
 - OneDrive 只申请 `Files.ReadWrite.AppFolder`，看不到应用专属文件夹之外的内容
 - 扩展无 content script，不读取网页内容
-- 建议为坚果云单独生成应用密码（可随时吊销），不要使用登录密码
+- 建议为坚果云、通用 WebDAV 或 123 云盘单独生成应用密码（可随时吊销），不要使用登录密码
 - 若设备共用，依赖操作系统账户隔离；v2 可加本地口令（PBKDF2 + AES-GCM）
 
 ## 11. 目录与命名约定
