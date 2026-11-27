@@ -2,14 +2,16 @@
 
 ## 1. 自动化测试
 
-### 单元测试（`npm test`，27 项）
+### 单元测试（`npm test`，38 项）
 
 | 文件 | 覆盖点 |
 | --- | --- |
 | `tests/model.test.ts` | UUID 分配、内容指纹、删除→墓碑、根节点按位置识别（兼容非 1/2/3 的 profile）、备份子树排除 |
 | `tests/merge.test.ts` | 后写赢、存活 vs 墓碑、父删级联、同名文件夹去重、兄弟重排序、墓碑 TTL |
 | `tests/plan.test.ts` | 差异统计、移动/排序判定、创建深度排序、删除顺序、本机清空保护 |
-| `tests/webdav.test.ts` | PROPFIND 解析、路径拼接、gzip 快照编解码、错误包装 |
+| `tests/webdav.test.ts` | PROPFIND 解析、`D:` 大写命名空间与默认命名空间兼容、路径拼接、gzip 快照编解码、错误包装 |
+| `tests/webdav-provider.test.ts` | provider 工厂：坚果云仍用原适配器；通用 WebDAV 用独立地址/凭证；123 云盘用固定地址与独立凭证 |
+| `tests/settings.test.ts` | `webdav` / `pan123` provider 不被归一化；清除 WebDAV 或 123 云盘凭证不碰其他三套字段 |
 | `tests/onedrive.test.ts` | Graph 路径编码、列表映射、gzip 读写往返、401 刷新重试、refresh token 刷新、设备代码申请与轮询 |
 
 ### 端到端（`npm run test:e2e`，真实坚果云 + 双 Chrome 实例）
@@ -69,6 +71,37 @@ E2E 运行前会清理 `JGY_DIR` 下的测试快照（坚果云不允许删目�
 - [ ] 重新连接后能继续读取已有快照（refresh token 可用）
 - [ ] 真实账号下 Graph `/content` 302 下载不因域名权限失败
 
+### 通用 WebDAV 手工验收（需要真实服务器与凭证）
+
+本轮没有可用的真实 WebDAV 测试账号，以下项目保持未勾选；联调时不要把地址、账号、应用密码写进仓库。
+
+- [ ] 设置页能切换到「通用 WebDAV」面板，四个 provider 按钮互斥
+- [ ] 填错地址（非 http/https 或缺少 host）会立即提示，不发起网络请求
+- [ ] 首次点「测试连接」会弹出主机权限请求，只请求所填域名
+- [ ] 正确地址 + Basic Auth 能返回根目录条目
+- [ ] 保存后第一次同步能创建 `UDaSync/devices/`，书签栏出现本机备份
+- [ ] 第二台设备/第二个 profile 能看到预览并确认合并
+- [ ] 改名、移动、删除能在另一台设备收敛
+- [ ] 断开后本机 `webdavAccount` / `webdavPassword` 清除，云端文件保留
+- [ ] 切回坚果云、123 云盘或 OneDrive 后，原有配置与凭证仍在
+- [ ] 只支持 Digest/OAuth 的服务会返回明确的 401/连接失败提示，而不是静默失败
+
+### 123 云盘手工验收（需要真实 VIP 账号与第三方挂载凭证）
+
+本轮没有可用的 123 云盘 VIP 账号，以下项目保持未勾选。联调时不要把账号、应用密码或截图写进仓库。
+
+- [ ] 设置页能切换到「123 云盘」面板，四个 provider 按钮互斥
+- [ ] 固定地址显示为 `https://webdav.123pan.cn/webdav`，不可编辑
+- [ ] 空账号/空密码会提示，不发起网络请求
+- [ ] 首次点「测试连接」只请求 `https://webdav.123pan.cn/*` 的可选权限
+- [ ] 正确账号 + 应用密码能返回根目录条目
+- [ ] 保存后第一次同步能在授权文件夹下创建 `UDaSync/devices/`
+- [ ] 第二台设备/第二个 profile 能看到预览并确认合并
+- [ ] 改名、移动、删除能在另一台设备收敛
+- [ ] 断开后本机 `pan123Account` / `pan123Password` 清除，云端文件保留
+- [ ] 切回坚果云、通用 WebDAV 或 OneDrive 后，原有配置与凭证仍在
+- [ ] 只读权限的应用密码会返回明确失败提示，而不是静默失败
+
 ## 3. 构建产物检查
 
 `npm run build` 结束会执行 `scripts/verify-dist.mjs`，校验：
@@ -84,4 +117,8 @@ E2E 运行前会清理 `JGY_DIR` 下的测试快照（坚果云不允许删目�
 - 快照为整棵树的 gzip JSON，书签规模 > 5 万时建议增大轮询间隔
 - OneDrive 真实账号联调需要用户自己的 Entra client ID；个人 Microsoft 账号不能直接在 Microsoft Services 占位租户注册应用
 - OneDrive 使用设备代码流，首次连接需要打开登录页输入代码；设置页关闭会中断本次授权
+- 通用 WebDAV 只支持 Basic Auth，且服务器必须允许 `PROPFIND` / `MKCOL` / `PUT` / `DELETE`
+- 通用 WebDAV 首次连接会按域名请求可选主机权限；拒绝后需要到扩展详情页重新允许
+- 123 云盘的 WebDAV 是 VIP 权益，且其用户协议对长期自动化 WebDAV 调用有保留；公开推荐前需确认条款
+- 123 云盘使用固定入口 `https://webdav.123pan.cn/webdav`；如果官方调整地址，需要更新扩展常量，不能由用户在 UI 里改
 - 浏览器品牌版无法用命令行加载扩展，需界面「加载已解压」
