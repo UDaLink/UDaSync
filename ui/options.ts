@@ -1,10 +1,14 @@
 import { escapeHtml, fmtRelative, fmtTime, sendMessage } from './common';
+import { PAN123_WEBDAV_URL } from '../src/shared/constants';
 
 interface StateReply {
   config: {
-    provider: 'jianguoyun' | 'onedrive';
+    provider: 'jianguoyun' | 'webdav' | 'pan123' | 'onedrive';
     baseUrl: string;
     account: string;
+    webdavUrl: string;
+    webdavAccount: string;
+    pan123Account: string;
     dir: string;
     oneDriveClientId: string;
     oneDriveAccount: string;
@@ -16,6 +20,8 @@ interface StateReply {
     connectedAt: number | null;
     hasCredentials: boolean;
     hasJianguoyunCredentials: boolean;
+    hasWebdavCredentials: boolean;
+    hasPan123Credentials: boolean;
     hasOneDriveCredentials: boolean;
   };
   stats: {
@@ -62,10 +68,28 @@ function toastOd(msg: string, kind: 'ok' | 'error' = 'ok') {
   el.style.color = kind === 'error' ? 'var(--danger)' : 'var(--text-sub)';
 }
 
-function setProviderUI(provider: 'jianguoyun' | 'onedrive') {
+function toastWd(msg: string, kind: 'ok' | 'error' = 'ok') {
+  const el = $('wdMsg');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  el.style.color = kind === 'error' ? 'var(--danger)' : 'var(--text-sub)';
+}
+
+function toastP123(msg: string, kind: 'ok' | 'error' = 'ok') {
+  const el = $('p123Msg');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  el.style.color = kind === 'error' ? 'var(--danger)' : 'var(--text-sub)';
+}
+
+function setProviderUI(provider: 'jianguoyun' | 'webdav' | 'pan123' | 'onedrive') {
   $('providerJianguoyun').classList.toggle('active', provider === 'jianguoyun');
+  $('providerWebdav').classList.toggle('active', provider === 'webdav');
+  $('providerPan123').classList.toggle('active', provider === 'pan123');
   $('providerOneDrive').classList.toggle('active', provider === 'onedrive');
   $('jianguoyunPanel').classList.toggle('hidden', provider !== 'jianguoyun');
+  $('webdavPanel').classList.toggle('hidden', provider !== 'webdav');
+  $('pan123Panel').classList.toggle('hidden', provider !== 'pan123');
   $('oneDrivePanel').classList.toggle('hidden', provider !== 'onedrive');
 }
 
@@ -103,14 +127,36 @@ async function loadState() {
   $<HTMLInputElement>('appPassword').placeholder = cfg.hasJianguoyunCredentials
     ? '已保存，如需更换请输入新密码'
     : '坚果云后台生成的应用密码';
+  $<HTMLInputElement>('webdavUrl').value = cfg.webdavUrl;
+  $<HTMLInputElement>('webdavAccount').value = cfg.webdavAccount;
+  $<HTMLInputElement>('webdavPassword').placeholder = cfg.hasWebdavCredentials
+    ? '已保存，如需更换请输入新密码'
+    : '服务商生成的应用密码';
+  $<HTMLInputElement>('pan123Url').value = PAN123_WEBDAV_URL;
+  $<HTMLInputElement>('pan123Account').value = cfg.pan123Account;
+  $<HTMLInputElement>('pan123Password').placeholder = cfg.hasPan123Credentials
+    ? '已保存，如需更换请输入新密码'
+    : '第三方挂载生成的应用密码';
   $<HTMLInputElement>('oneDriveClientId').value = cfg.oneDriveClientId;
   $('odDirPath').textContent = `/${cfg.oneDriveDir}/`;
+  $('wdDirPath').textContent = `/${cfg.dir}/`;
+  $('p123DirPath').textContent = `/${cfg.dir}/`;
   $('deviceName').value = cfg.deviceName;
   $('dirPath').textContent = `/${cfg.dir}/`;
 
   $('connDot').className = `dot ${cfg.hasJianguoyunCredentials ? 'ok' : ''}`;
   $('connText').textContent = cfg.hasJianguoyunCredentials
     ? `已连接 ${cfg.account}`
+    : '未连接';
+
+  $('wdDot').className = `dot ${cfg.hasWebdavCredentials ? 'ok' : ''}`;
+  $('wdText').textContent = cfg.hasWebdavCredentials
+    ? `已连接 ${cfg.webdavAccount || 'WebDAV'}`
+    : '未连接';
+
+  $('p123Dot').className = `dot ${cfg.hasPan123Credentials ? 'ok' : ''}`;
+  $('p123Text').textContent = cfg.hasPan123Credentials
+    ? `已连接 ${cfg.pan123Account || '123 云盘'}`
     : '未连接';
 
   $('odDot').className = `dot ${cfg.hasOneDriveCredentials ? 'ok' : ''}`;
@@ -175,6 +221,30 @@ $('providerOneDrive').addEventListener('click', async () => {
   const res = await sendMessage({ type: 'SET_PROVIDER', provider: 'onedrive' });
   if (!res.ok) toastOd(res.error ?? '切换失败', 'error');
   await loadState();
+});
+
+$('providerWebdav').addEventListener('click', async () => {
+  if (odDeviceCode) {
+    stopOdPolling();
+    odDeviceCode = '';
+    $('odCodePanel').classList.add('hidden');
+    $('odPollStatus').textContent = '';
+  }
+  const res = await sendMessage({ type: 'SET_PROVIDER', provider: 'webdav' });
+  await loadState();
+  if (!res.ok) toastWd(res.error ?? '切换失败', 'error');
+});
+
+$('providerPan123').addEventListener('click', async () => {
+  if (odDeviceCode) {
+    stopOdPolling();
+    odDeviceCode = '';
+    $('odCodePanel').classList.add('hidden');
+    $('odPollStatus').textContent = '';
+  }
+  const res = await sendMessage({ type: 'SET_PROVIDER', provider: 'pan123' });
+  await loadState();
+  if (!res.ok) toastP123(res.error ?? '切换失败', 'error');
 });
 
 // ---------- OneDrive 设备代码登录 ----------
@@ -339,6 +409,158 @@ $('disconnectBtn').addEventListener('click', async () => {
   await sendMessage({ type: 'DISCONNECT' });
   await loadState();
   toast('已断开并清除本机凭证。');
+});
+
+// ---------- 通用 WebDAV ----------
+/**
+ * 请求访问用户填写的 WebDAV 服务器。
+ * 注意：chrome.permissions.request 必须在点击手势中同步发起，函数内部不要在它之前 await。
+ */
+async function requestWebdavPermission(rawUrl: string): Promise<boolean> {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+    if (!url.hostname || url.search || url.hash) return false;
+    if (url.username || url.password) return false;
+    // 不把端口写进 match pattern：Chrome 的 host permission 按 scheme + host 匹配，默认覆盖所有端口
+    const origin = `${url.protocol}//${url.hostname}/*`;
+    return await chrome.permissions.request({ origins: [origin] });
+  } catch {
+    return false;
+  }
+}
+
+$('wdTestBtn').addEventListener('click', async () => {
+  const baseUrl = $<HTMLInputElement>('webdavUrl').value.trim();
+  const account = $<HTMLInputElement>('webdavAccount').value.trim();
+  const appPassword = $<HTMLInputElement>('webdavPassword').value.trim();
+  if (!baseUrl || !account || !appPassword) {
+    toastWd('请填写完整的服务器地址、账号与应用密码。', 'error');
+    return;
+  }
+  const granted = await requestWebdavPermission(baseUrl);
+  if (!granted) {
+    toastWd('需要授权访问该服务器；请在浏览器弹窗中允许，或检查地址是否为 http/https。', 'error');
+    return;
+  }
+  $('wdTestBtn').disabled = true;
+  toastWd('正在测试连接…');
+  const res = await sendMessage<{ entries: string[] }>({
+    type: 'WEBDAV_TEST_CONNECTION',
+    baseUrl,
+    account,
+    appPassword,
+  });
+  $('wdTestBtn').disabled = false;
+  if (res.ok) toastWd(`连接成功，根目录可见 ${res.data?.entries.length ?? 0} 个条目`, 'ok');
+  else toastWd(`连接失败：${res.error ?? '未知错误'}`, 'error');
+});
+
+$('wdSaveBtn').addEventListener('click', async () => {
+  const baseUrl = $<HTMLInputElement>('webdavUrl').value.trim();
+  const account = $<HTMLInputElement>('webdavAccount').value.trim();
+  const appPassword = $<HTMLInputElement>('webdavPassword').value.trim();
+  if (!baseUrl || !account || !appPassword) {
+    toastWd('请填写完整的服务器地址、账号与应用密码。', 'error');
+    return;
+  }
+  const granted = await requestWebdavPermission(baseUrl);
+  if (!granted) {
+    toastWd('需要授权访问该服务器；请在浏览器弹窗中允许，或检查地址是否为 http/https。', 'error');
+    return;
+  }
+  $('wdSaveBtn').disabled = true;
+  toastWd('正在保存并执行首次同步…');
+  const res = await sendMessage<{ needsConfirm?: boolean; summary?: NonNullable<StateReply['stats']['pendingPreview']>; error?: string }>({
+    type: 'WEBDAV_SAVE_CONFIG',
+    baseUrl,
+    account,
+    appPassword,
+  });
+  $('wdSaveBtn').disabled = false;
+  if (!res.ok) {
+    toastWd(`保存失败：${res.error ?? '未知错误'}`, 'error');
+    await loadState();
+    return;
+  }
+  toastWd('已连接。');
+  await loadState();
+  if (res.data?.needsConfirm && res.data.summary) {
+    renderPreview(res.data.summary);
+    toastWd('云端已有其他设备的书签，请在上方预览后确认合并。');
+  }
+});
+
+$('wdDisconnectBtn').addEventListener('click', async () => {
+  if (!confirm('断开后将清除本机的通用 WebDAV 凭证（云端数据不会删除）。继续？')) return;
+  await sendMessage({ type: 'DISCONNECT' });
+  await loadState();
+  toastWd('已断开并清除本机凭证。');
+});
+
+// ---------- 123 云盘 ----------
+$('p123TestBtn').addEventListener('click', async () => {
+  const account = $<HTMLInputElement>('pan123Account').value.trim();
+  const appPassword = $<HTMLInputElement>('pan123Password').value.trim();
+  if (!account || !appPassword) {
+    toastP123('请填写 123 云盘账号与应用密码。', 'error');
+    return;
+  }
+  const granted = await requestWebdavPermission(PAN123_WEBDAV_URL);
+  if (!granted) {
+    toastP123('需要授权访问 123 云盘；请在浏览器弹窗中允许。', 'error');
+    return;
+  }
+  $('p123TestBtn').disabled = true;
+  toastP123('正在测试连接…');
+  const res = await sendMessage<{ entries: string[] }>({
+    type: 'PAN123_TEST_CONNECTION',
+    account,
+    appPassword,
+  });
+  $('p123TestBtn').disabled = false;
+  if (res.ok) toastP123(`连接成功，根目录可见 ${res.data?.entries.length ?? 0} 个条目`, 'ok');
+  else toastP123(`连接失败：${res.error ?? '未知错误'}`, 'error');
+});
+
+$('p123SaveBtn').addEventListener('click', async () => {
+  const account = $<HTMLInputElement>('pan123Account').value.trim();
+  const appPassword = $<HTMLInputElement>('pan123Password').value.trim();
+  if (!account || !appPassword) {
+    toastP123('请填写 123 云盘账号与应用密码。', 'error');
+    return;
+  }
+  const granted = await requestWebdavPermission(PAN123_WEBDAV_URL);
+  if (!granted) {
+    toastP123('需要授权访问 123 云盘；请在浏览器弹窗中允许。', 'error');
+    return;
+  }
+  $('p123SaveBtn').disabled = true;
+  toastP123('正在保存并执行首次同步…');
+  const res = await sendMessage<{ needsConfirm?: boolean; summary?: NonNullable<StateReply['stats']['pendingPreview']>; error?: string }>({
+    type: 'PAN123_SAVE_CONFIG',
+    account,
+    appPassword,
+  });
+  $('p123SaveBtn').disabled = false;
+  if (!res.ok) {
+    toastP123(`保存失败：${res.error ?? '未知错误'}`, 'error');
+    await loadState();
+    return;
+  }
+  toastP123('已连接。');
+  await loadState();
+  if (res.data?.needsConfirm && res.data.summary) {
+    renderPreview(res.data.summary);
+    toastP123('云端已有其他设备的书签，请在上方预览后确认合并。');
+  }
+});
+
+$('p123DisconnectBtn').addEventListener('click', async () => {
+  if (!confirm('断开后将清除本机的 123 云盘凭证（云端数据不会删除）。继续？')) return;
+  await sendMessage({ type: 'DISCONNECT' });
+  await loadState();
+  toastP123('已断开并清除本机凭证。');
 });
 
 // ---------- 同步 ----------
