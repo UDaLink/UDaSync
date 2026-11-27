@@ -1,0 +1,19 @@
+name: Rename dev
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/rename-dev.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rename dev to feature
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST /repos/${{ github.repository }}/branches/dev/rename -f new_name=feature
