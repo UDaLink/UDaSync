@@ -9,6 +9,8 @@ export const SCHEMA_VERSION = 1;
 /** 坚果云 WebDAV 根地址（只认真实 UTF-8 路径，中文路径在浏览器里会被百分号编码，故目录名必须纯 ASCII） */
 export const DEFAULT_BASE_URL = 'https://dav.jianguoyun.com/dav/';
 export const DEFAULT_REMOTE_DIR = 'UDaSync';
+/** 123 云盘 WebDAV 固定入口；账号与应用密码来自「第三方挂载」 */
+export const PAN123_WEBDAV_URL = 'https://webdav.123pan.cn/webdav';
 export const REMOTE_DEVICES_DIR = 'devices';
 export const REMOTE_BACKUPS_DIR = 'backups';
 

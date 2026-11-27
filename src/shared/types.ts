@@ -31,7 +31,7 @@ export interface Snapshot {
 }
 
 /** 当前使用的云端存储服务 */
-export type StorageProvider = 'jianguoyun' | 'onedrive';
+export type StorageProvider = 'jianguoyun' | 'webdav' | 'pan123' | 'onedrive';
 
 /** OneDrive OAuth 令牌（只保存在本机 chrome.storage.local） */
 export interface OneDriveTokens {
@@ -60,6 +60,16 @@ export interface UdasynConfig {
   baseUrl: string;
   account: string;
   appPassword: string;
+  /** 通用 WebDAV 的服务器地址（与坚果云配置分开保存） */
+  webdavUrl: string;
+  /** 通用 WebDAV 的用户名 */
+  webdavAccount: string;
+  /** 通用 WebDAV 的应用密码 */
+  webdavPassword: string;
+  /** 123 云盘账号（第三方挂载页显示的账号） */
+  pan123Account: string;
+  /** 123 云盘应用密码 */
+  pan123Password: string;
   /** 云端目录名，固定 ASCII */
   dir: string;
   /** OneDrive 的 Entra Application (client) ID */

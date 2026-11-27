@@ -1,5 +1,5 @@
 /**
- * 坚果云 WebDAV 客户端。
+ * WebDAV 客户端：坚果云与通用 WebDAV 共用。
  * 只做四件事：列目录、读文件、写文件、删文件（外加建目录）。
  * 所有请求统一走 RequestBudget，防止撞上 30 分钟 600 次的服务端限流。
  */
@@ -197,14 +197,14 @@ export class WebDavClient {
   }
 }
 
-/** 极简 multistatus 解析：坚果云返回的 href 为真实 UTF-8，我们的目录名全是 ASCII */
+/** 极简 multistatus 解析：兼容常见 WebDAV 服务器的 d:/D:/默认命名空间，不依赖 DOM。 */
 export function parseMultiStatus(xml: string, requestPath: string): DavEntry[] {
   const entries: DavEntry[] = [];
-  const responses = xml.split(/<d:response[\s>]/i).slice(1);
-  const basePath = `/${requestPath.replace(/^\/+|\/+$/g, '')}`;
+  // 允许任意 XML 前缀，也允许 <response> 使用默认命名空间
+  const responses = xml.split(/<(?:[A-Za-z_][\w.-]*:)?response\b[^>]*>/i).slice(1);
 
   for (const chunk of responses) {
-    const hrefMatch = chunk.match(/<d:href>([^<]*)<\/d:href>/i);
+    const hrefMatch = chunk.match(/<(?:[A-Za-z_][\w.-]*:)?href\b[^>]*>([^<]*)</i);
     if (!hrefMatch) continue;
     let href = hrefMatch[1]!;
     try {
@@ -212,9 +212,11 @@ export function parseMultiStatus(xml: string, requestPath: string): DavEntry[] {
     } catch {
       /* 保持原样 */
     }
-    const isDir = /<d:collection\s*\/?>|<d:resourcetype>\s*<d:collection/i.test(chunk);
-    const sizeMatch = chunk.match(/<d:getcontentlength>(\d+)<\/d:getcontentlength>/i);
-    const modMatch = chunk.match(/<d:getlastmodified>([^<]*)<\/d:getlastmodified>/i);
+    const isDir =
+      /<(?:[A-Za-z_][\w.-]*:)?collection\b[^>]*?\/?>/i.test(chunk) ||
+      /<(?:[A-Za-z_][\w.-]*:)?resourcetype\b[^>]*>\s*<(?:[A-Za-z_][\w.-]*:)?collection\b/i.test(chunk);
+    const sizeMatch = chunk.match(/<(?:[A-Za-z_][\w.-]*:)?getcontentlength\b[^>]*>(\d+)</i);
+    const modMatch = chunk.match(/<(?:[A-Za-z_][\w.-]*:)?getlastmodified\b[^>]*>([^<]*)</i);
 
     let path = href;
     if (path.startsWith('http')) {

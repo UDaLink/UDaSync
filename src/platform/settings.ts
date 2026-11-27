@@ -44,12 +44,24 @@ function detectDeviceName(): string {
 export async function getConfig(): Promise<UdasynConfig> {
   const stored = await chrome.storage.local.get(STORAGE_KEYS.config);
   const cfg = stored[STORAGE_KEYS.config] as Partial<UdasynConfig> | undefined;
-  const provider: StorageProvider = cfg?.provider === 'onedrive' ? 'onedrive' : 'jianguoyun';
+  const provider: StorageProvider =
+    cfg?.provider === 'onedrive'
+      ? 'onedrive'
+      : cfg?.provider === 'pan123'
+        ? 'pan123'
+        : cfg?.provider === 'webdav'
+          ? 'webdav'
+          : 'jianguoyun';
   const merged: UdasynConfig = {
     provider,
     baseUrl: cfg?.baseUrl ?? DEFAULT_BASE_URL,
     account: cfg?.account ?? '',
     appPassword: cfg?.appPassword ?? '',
+    webdavUrl: cfg?.webdavUrl ?? '',
+    webdavAccount: cfg?.webdavAccount ?? '',
+    webdavPassword: cfg?.webdavPassword ?? '',
+    pan123Account: cfg?.pan123Account ?? '',
+    pan123Password: cfg?.pan123Password ?? '',
     dir: cfg?.dir ?? DEFAULT_REMOTE_DIR,
     oneDriveClientId: cfg?.oneDriveClientId ?? DEFAULT_ONEDRIVE_CLIENT_ID,
     oneDriveAccount: cfg?.oneDriveAccount ?? '',
@@ -88,6 +100,30 @@ export async function clearCredentials(provider?: StorageProvider): Promise<void
     });
     return;
   }
+  if (target === 'webdav') {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.config]: {
+        ...cur,
+        webdavAccount: '',
+        webdavPassword: '',
+        connectedAt: null,
+        firstRunDone: false,
+      },
+    });
+    return;
+  }
+  if (target === 'pan123') {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.config]: {
+        ...cur,
+        pan123Account: '',
+        pan123Password: '',
+        connectedAt: null,
+        firstRunDone: false,
+      },
+    });
+    return;
+  }
   await chrome.storage.local.set({
     [STORAGE_KEYS.config]: {
       ...cur,
@@ -117,6 +153,12 @@ export async function hasCredentials(cfg?: UdasynConfig): Promise<boolean> {
   if (cur.provider === 'onedrive') {
     const tokens = await getOneDriveTokens();
     return Boolean(tokens?.refreshToken);
+  }
+  if (cur.provider === 'webdav') {
+    return Boolean(cur.webdavUrl && cur.webdavAccount && cur.webdavPassword);
+  }
+  if (cur.provider === 'pan123') {
+    return Boolean(cur.pan123Account && cur.pan123Password);
   }
   return Boolean(cur.account && cur.appPassword);
 }
