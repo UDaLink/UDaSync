@@ -14,7 +14,7 @@
           <div class="logo">U</div>
           <div>
             <h1>UDaSync</h1>
-            <p class="tagline">坚果云 / OneDrive 书签同步</p>
+            <p class="tagline">多云端书签同步</p>
           </div>
         </div>
         <nav>
@@ -26,7 +26,7 @@
           <button class="nav" data-tab="logs">日志</button>
           <button class="nav" data-tab="about">关于</button>
         </nav>
-        <div class="side-foot muted">v0.2.0 · WebDAV / OneDrive</div>
+        <div class="side-foot muted">v0.2.0 · 多云端同步</div>
       </aside>
 
       <main>
@@ -36,10 +36,12 @@
             <h3>存储服务</h3>
             <div class="provider-switch">
               <button id="providerJianguoyun" class="provider active">坚果云 WebDAV</button>
+              <button id="providerWebdav" class="provider">通用 WebDAV</button>
+              <button id="providerPan123" class="provider">123 云盘</button>
               <button id="providerOneDrive" class="provider">OneDrive</button>
             </div>
             <p class="note" style="margin-top: 12px">
-              两个服务二选一。切换不会删除另一边的云端数据；当前服务需要单独连接。
+              四个服务任选其一。切换不会删除另一边的云端数据；当前服务需要单独连接。
             </p>
           </div>
 
@@ -92,6 +94,122 @@
               因此云端目录名固定为 ASCII 的 <strong>UDaSync</strong>，请勿改成中文。
             </p>
           </div>
+          </div>
+
+          <div id="webdavPanel" class="hidden">
+            <h2>连接通用 WebDAV</h2>
+            <p class="lead">连接任意支持 Basic Auth 的 WebDAV 服务，例如 123 云盘、Nextcloud、Synology、InfiniCLOUD、Koofr 等。</p>
+
+            <div class="panel">
+              <h3>账号信息</h3>
+              <div class="status-line" id="wdStatus" style="margin-bottom: 14px">
+                <span class="dot" id="wdDot"></span><span id="wdText">未连接</span>
+              </div>
+
+              <div class="field">
+                <label for="webdavUrl">服务器地址</label>
+                <input id="webdavUrl" type="url" placeholder="https://webdav.123pan.cn/webdav" />
+                <p class="note">填到 WebDAV 根路径为止，例如 Nextcloud 的 <code class="mono">https://cloud.example.com/remote.php/dav/files/你的用户名/</code>。</p>
+              </div>
+              <div class="grid2">
+                <div class="field">
+                  <label for="webdavAccount">账号 / 用户名</label>
+                  <input id="webdavAccount" type="text" autocomplete="username" placeholder="WebDAV 用户名" />
+                </div>
+                <div class="field">
+                  <label for="webdavPassword">应用密码 / 密码</label>
+                  <input id="webdavPassword" type="password" autocomplete="new-password" placeholder="服务商生成的应用密码" />
+                </div>
+              </div>
+              <p class="note">
+                优先使用服务商提供的<strong>应用密码</strong>，不要填主密码。凭证只保存在本机浏览器配置中。
+                通用 WebDAV 目前只支持 <strong>Basic Auth</strong>；仅提供 Digest 或 OAuth 的服务暂不支持。
+              </p>
+              <p class="note">
+                HTTP 地址只建议在可信局域网使用；公网请使用 HTTPS。首次测试或保存时，浏览器会请求访问该服务器的权限。
+              </p>
+
+              <div class="actions" style="margin-top: 14px">
+                <button id="wdTestBtn">测试连接</button>
+                <button id="wdSaveBtn" class="primary">保存并连接</button>
+                <button id="wdDisconnectBtn" class="ghost danger">断开并清除凭证</button>
+              </div>
+              <div id="wdMsg" class="note hidden" style="margin-top: 12px"></div>
+            </div>
+
+            <div class="panel">
+              <h3>云端目录</h3>
+              <p class="muted" style="font-size: 12px">
+                书签快照保存在 WebDAV 根目录下的
+                <code class="mono" id="wdDirPath">/UDaSync/</code>，其中 <code class="mono">devices/</code> 每台设备一个文件，
+                <code class="mono">backups/</code> 保留最近 10 份自动备份。
+              </p>
+              <p class="note" style="margin-top: 10px">
+                目录名必须是 ASCII。部分服务需要先在网页端创建应用密码并授权文件夹或读写权限；
+                例如 123 云盘需在「第三方挂载」中生成应用密码，WebDAV 属于其 VIP 权益，长期高频自动化调用前请先确认服务条款。
+              </p>
+            </div>
+          </div>
+
+          <div id="pan123Panel" class="hidden">
+            <h2>连接 123 云盘</h2>
+            <p class="lead">使用 123 云盘官方 WebDAV 授权存取书签。服务器地址固定，只需填写第三方挂载页生成的账号与应用密码。</p>
+
+            <div class="panel">
+              <h3>账号信息</h3>
+              <div class="status-line" id="p123Status" style="margin-bottom: 14px">
+                <span class="dot" id="p123Dot"></span><span id="p123Text">未连接</span>
+              </div>
+
+              <div class="field">
+                <label for="pan123Url">服务器地址（固定）</label>
+                <input id="pan123Url" type="url" readonly value="https://webdav.123pan.cn/webdav" />
+                <p class="note">由 UDaSync 固定使用，不需要手动填写；不使用「通用 WebDAV」里的地址。</p>
+              </div>
+              <div class="grid2">
+                <div class="field">
+                  <label for="pan123Account">123 云盘账号</label>
+                  <input id="pan123Account" type="text" autocomplete="username" placeholder="第三方挂载页显示的账号" />
+                </div>
+                <div class="field">
+                  <label for="pan123Password">应用密码</label>
+                  <input id="pan123Password" type="password" autocomplete="new-password" placeholder="第三方挂载生成的应用密码" />
+                </div>
+              </div>
+              <p class="note">
+                登录 123 云盘网页端，在「工具中心 → 第三方挂载 → WebDAV 授权管理」里
+                <a href="https://www.123pan.com/thirdPartyMount" target="_blank" rel="noreferrer">添加应用</a>。
+                应用名可填 <strong>UDaSync</strong>，选择授权文件夹，权限必须选<strong>读写</strong>；
+                生成后复制页面显示的<strong>账号</strong>和<strong>应用密码</strong>，不要填登录主密码。
+              </p>
+              <p class="note">
+                WebDAV 挂载属于 123 云盘 VIP 权益；只读权限无法同步。123 云盘用户协议对长期、高频、持续性
+                WebDAV 自动化调用有保留，公开推荐或长期后台同步前请先确认条款。凭证只保存在本机浏览器配置中。
+              </p>
+              <p class="note">
+                首次测试或保存时，浏览器会请求访问 <code class="mono">https://webdav.123pan.cn/*</code> 的权限。
+              </p>
+
+              <div class="actions" style="margin-top: 14px">
+                <button id="p123TestBtn">测试连接</button>
+                <button id="p123SaveBtn" class="primary">保存并连接</button>
+                <button id="p123DisconnectBtn" class="ghost danger">断开并清除凭证</button>
+              </div>
+              <div id="p123Msg" class="note hidden" style="margin-top: 12px"></div>
+            </div>
+
+            <div class="panel">
+              <h3>云端目录</h3>
+              <p class="muted" style="font-size: 12px">
+                书签快照保存在 123 云盘授权文件夹下的
+                <code class="mono" id="p123DirPath">/UDaSync/</code>，其中 <code class="mono">devices/</code> 每台设备一个文件，
+                <code class="mono">backups/</code> 保留最近 10 份自动备份。
+              </p>
+              <p class="note" style="margin-top: 10px">
+                如果添加应用时只授权了某个子文件夹，<code class="mono">UDaSync/</code> 会创建在该子文件夹内。
+                目录名固定为 ASCII，不要改成中文。
+              </p>
+            </div>
           </div>
 
           <div id="oneDrivePanel" class="hidden">
@@ -243,7 +361,7 @@
         <!-- 关于 -->
         <section id="tab-about" class="tab">
           <h2>关于 UDaSync</h2>
-          <p class="lead">一个只做一件事的扩展：把你的书签，通过你自己的坚果云或 OneDrive，在多台电脑之间同步。</p>
+          <p class="lead">一个只做一件事的扩展：把你的书签，通过你自己的 WebDAV、123 云盘或 OneDrive，在多台电脑之间同步。</p>
 
           <div class="panel">
             <h3>设计要点</h3>
@@ -252,6 +370,8 @@
               <div class="row"><span>冲突策略</span><strong>后写赢 + 墓碑 30 天 + 云端备份 10 份</strong></div>
               <div class="row"><span>触发方式</span><strong>书签变动 5 秒防抖 + 启动拉取 + 每 10 分钟轮询</strong></div>
               <div class="row"><span>数据位置（坚果云）</span><strong class="mono">/UDaSync/devices/&lt;设备&gt;.json.gz</strong></div>
+              <div class="row"><span>数据位置（通用 WebDAV）</span><strong class="mono">&lt;WebDAV 根&gt;/UDaSync/devices/&lt;设备&gt;.json.gz</strong></div>
+              <div class="row"><span>数据位置（123 云盘）</span><strong class="mono">授权文件夹/UDaSync/devices/&lt;设备&gt;.json.gz</strong></div>
               <div class="row"><span>数据位置（OneDrive）</span><strong class="mono">应用专属文件夹 /UDaSync/devices/&lt;设备&gt;.json.gz</strong></div>
             </div>
           </div>
@@ -260,7 +380,7 @@
             <h3>隐私</h3>
             <p class="note">
               UDaSync 不采集任何分析数据、不访问与书签无关的网页。网络请求只发往你选择的存储服务：
-              坚果云 WebDAV，或 Microsoft Graph 的 OneDrive 应用专属文件夹。书签内容只存在本机与你的云端账号里。
+              坚果云、你自己填写的通用 WebDAV、123 云盘，或 Microsoft Graph 的 OneDrive 应用专属文件夹。书签内容只存在本机与你的云端账号里。
             </p>
           </div>
 
@@ -268,7 +388,11 @@
             <h3>排查建议</h3>
             <p class="note">
               坚果云失败时依次检查：① 应用密码是否被吊销；② 免费版每月 1GB 上行流量是否用尽；
-              ③ 是否触发 30 分钟 600 次请求限制。OneDrive 失败时检查：① client ID 是否填写正确；
+              ③ 是否触发 30 分钟 600 次请求限制。通用 WebDAV 失败时检查：① 地址是否以 http:// 或 https:// 开头；
+              ② 是否使用服务商的应用密码；③ 是否允许扩展访问该域名；④ 服务端是否只支持 Digest/OAuth。
+              123 云盘失败时检查：① 是否在「第三方挂载」生成了账号和应用密码（不是登录密码）；
+              ② 应用权限是否选了「读写」；③ 是否已开通 WebDAV 所需的 VIP 权益；④ 授权文件夹是否仍然有效。
+              OneDrive 失败时检查：① client ID 是否填写正确；
               ② Entra 应用是否启用 public client flows；③ 授权是否已过期或被撤销。
             </p>
           </div>
