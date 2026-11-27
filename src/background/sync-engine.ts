@@ -106,7 +106,13 @@ export async function runSync(trigger: SyncTrigger, options: SyncOptions = { app
 async function doSync(trigger: SyncTrigger, options: SyncOptions): Promise<SyncResult> {
   const cfg = await getConfig();
   if (!(await hasCredentials(cfg))) {
-    const message = cfg.provider === 'onedrive' ? '尚未连接 OneDrive' : '尚未绑定坚果云账号';
+    const message = cfg.provider === 'onedrive'
+      ? '尚未连接 OneDrive'
+      : cfg.provider === 'pan123'
+        ? '尚未连接 123 云盘'
+        : cfg.provider === 'webdav'
+          ? '尚未连接 WebDAV'
+          : '尚未绑定坚果云账号';
     await patchStats({ lastStatus: 'error', lastError: message });
     await setBadge('error');
     return { ok: false, error: message };
