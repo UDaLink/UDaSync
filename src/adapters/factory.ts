@@ -4,6 +4,8 @@ import type { OneDriveTokens, UdasynConfig } from '../shared/types';
 import { JianguoyunAdapter } from './jianguoyun';
 import { OneDriveAdapter } from './onedrive';
 import { OneDriveAuth } from './onedrive-auth';
+import { Pan123Adapter } from './pan123';
+import { WebDavAdapter } from './webdav-adapter';
 import type { StorageAdapter } from './storage-adapter';
 
 export interface AdapterOptions {
@@ -29,6 +31,25 @@ export function createStorageAdapter(opts: AdapterOptions): StorageAdapter {
       onLog: opts.onLog,
       fetchImpl: opts.fetchImpl,
     });
+  }
+
+  if (cfg.provider === 'webdav') {
+    return new WebDavAdapter(
+      cfg.webdavUrl,
+      cfg.webdavAccount,
+      cfg.webdavPassword,
+      cfg.dir,
+      opts.onLog,
+    );
+  }
+
+  if (cfg.provider === 'pan123') {
+    return new Pan123Adapter(
+      cfg.pan123Account,
+      cfg.pan123Password,
+      cfg.dir,
+      opts.onLog,
+    );
   }
 
   return new JianguoyunAdapter(
