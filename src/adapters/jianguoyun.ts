@@ -4,18 +4,8 @@
  */
 
 import { WebDavClient } from './webdav';
+import { gzipText, gunzipText } from './gzip';
 import type { StorageAdapter, StoredObject } from './storage-adapter';
-
-async function gzip(text: string): Promise<Uint8Array> {
-  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
-  const buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
-}
-
-async function gunzip(bytes: Uint8Array): Promise<string> {
-  const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return await new Response(stream).text();
-}
 
 export class JianguoyunAdapter implements StorageAdapter {
   readonly directory: string;
@@ -53,12 +43,12 @@ export class JianguoyunAdapter implements StorageAdapter {
   async readJson<T>(path: string): Promise<T | null> {
     const bytes = await this.client.get(this.path(path));
     if (!bytes) return null;
-    const text = await gunzip(bytes);
+    const text = await gunzipText(bytes);
     return JSON.parse(text) as T;
   }
 
   async writeJson(path: string, value: unknown): Promise<void> {
-    const payload = await gzip(JSON.stringify(value));
+    const payload = await gzipText(JSON.stringify(value));
     await this.client.put(this.path(path), payload, 'application/gzip');
   }
 

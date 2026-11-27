@@ -2,7 +2,7 @@
 
 ## 1. 自动化测试
 
-### 单元测试（`npm test`，20 项）
+### 单元测试（`npm test`，27 项）
 
 | 文件 | 覆盖点 |
 | --- | --- |
@@ -10,6 +10,7 @@
 | `tests/merge.test.ts` | 后写赢、存活 vs 墓碑、父删级联、同名文件夹去重、兄弟重排序、墓碑 TTL |
 | `tests/plan.test.ts` | 差异统计、移动/排序判定、创建深度排序、删除顺序、本机清空保护 |
 | `tests/webdav.test.ts` | PROPFIND 解析、路径拼接、gzip 快照编解码、错误包装 |
+| `tests/onedrive.test.ts` | Graph 路径编码、列表映射、gzip 读写往返、401 刷新重试、refresh token 刷新、设备代码申请与轮询 |
 
 ### 端到端（`npm run test:e2e`，真实坚果云 + 双 Chrome 实例）
 
@@ -55,6 +56,19 @@ E2E 运行前会清理 `JGY_DIR` 下的测试快照（坚果云不允许删目�
 - [ ] 备份页能回滚到历史快照
 - [ ] 移除旧设备后不再读取其快照
 
+### OneDrive 手工验收（需要真实 client ID）
+
+- [x] 设置页重载后能切换 OneDrive 面板，空 client ID 会提示
+- [x] 填无效 client ID 会向 Microsoft 发起设备代码请求，并显示 `AADSTS700038` 错误（说明登录端点与 host permission 已生效）
+- [ ] 填有效 client ID 后能拿到设备代码，登录页能打开
+- [ ] 在 Microsoft 页面输入代码并同意权限后，设置页显示已连接账号
+- [ ] 首次同步能写入 `Apps/UDaSync/devices/`，书签栏出现本机备份
+- [ ] 第二台设备/第二个 profile 能看到预览并确认合并
+- [ ] 删除、改名、移动能在另一台设备收敛
+- [ ] 断开 OneDrive 后本机 token 清除，云端文件保留
+- [ ] 重新连接后能继续读取已有快照（refresh token 可用）
+- [ ] 真实账号下 Graph `/content` 302 下载不因域名权限失败
+
 ## 3. 构建产物检查
 
 `npm run build` 结束会执行 `scripts/verify-dist.mjs`，校验：
@@ -68,5 +82,6 @@ E2E 运行前会清理 `JGY_DIR` 下的测试快照（坚果云不允许删目�
 - 坚果云免费版 30 分钟 600 请求，扩展内置 450 次预算并自动退避
 - 不支持递归删除目录（403），清理逐文件执行
 - 快照为整棵树的 gzip JSON，书签规模 > 5 万时建议增大轮询间隔
-- 暂不支持 OneDrive；`StorageAdapter` 已预留
+- OneDrive 真实账号联调需要用户自己的 Entra client ID；个人 Microsoft 账号不能直接在 Microsoft Services 占位租户注册应用
+- OneDrive 使用设备代码流，首次连接需要打开登录页输入代码；设置页关闭会中断本次授权
 - 浏览器品牌版无法用命令行加载扩展，需界面「加载已解压」

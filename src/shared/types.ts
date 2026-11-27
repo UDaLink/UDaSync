@@ -30,12 +30,44 @@ export interface Snapshot {
   nodes: BookmarkNode[];
 }
 
+/** 当前使用的云端存储服务 */
+export type StorageProvider = 'jianguoyun' | 'onedrive';
+
+/** OneDrive OAuth 令牌（只保存在本机 chrome.storage.local） */
+export interface OneDriveTokens {
+  accessToken: string;
+  refreshToken: string;
+  /** 毫秒时间戳 */
+  expiresAt: number;
+  scope: string;
+  tokenType: string;
+  /** 登录后从 /me 取得的账号标识，仅用于界面显示 */
+  account: string;
+}
+
+/** 设备代码登录返回给界面的信息 */
+export interface DeviceCodeInfo {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+  message?: string;
+}
+
 export interface UdasynConfig {
+  provider: StorageProvider;
   baseUrl: string;
   account: string;
   appPassword: string;
   /** 云端目录名，固定 ASCII */
   dir: string;
+  /** OneDrive 的 Entra Application (client) ID */
+  oneDriveClientId: string;
+  /** OneDrive 登录账号，仅用于界面显示 */
+  oneDriveAccount: string;
+  /** OneDrive 应用专属文件夹下的目录名，固定 ASCII */
+  oneDriveDir: string;
   deviceId: string;
   deviceName: string;
   paused: boolean;

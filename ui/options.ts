@@ -2,15 +2,21 @@ import { escapeHtml, fmtRelative, fmtTime, sendMessage } from './common';
 
 interface StateReply {
   config: {
+    provider: 'jianguoyun' | 'onedrive';
     baseUrl: string;
     account: string;
     dir: string;
+    oneDriveClientId: string;
+    oneDriveAccount: string;
+    oneDriveDir: string;
     deviceId: string;
     deviceName: string;
     paused: boolean;
     firstRunDone: boolean;
     connectedAt: number | null;
     hasCredentials: boolean;
+    hasJianguoyunCredentials: boolean;
+    hasOneDriveCredentials: boolean;
   };
   stats: {
     lastSyncAt: number | null;
@@ -30,6 +36,15 @@ interface StateReply {
   syncing: boolean;
 }
 
+interface DeviceCodeStart {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+  message?: string;
+}
+
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 let state: StateReply | null = null;
 
@@ -38,6 +53,20 @@ function toast(msg: string, kind: 'ok' | 'error' = 'ok') {
   el.textContent = msg;
   el.classList.remove('hidden');
   el.style.color = kind === 'error' ? 'var(--danger)' : 'var(--text-sub)';
+}
+
+function toastOd(msg: string, kind: 'ok' | 'error' = 'ok') {
+  const el = $('odMsg');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  el.style.color = kind === 'error' ? 'var(--danger)' : 'var(--text-sub)';
+}
+
+function setProviderUI(provider: 'jianguoyun' | 'onedrive') {
+  $('providerJianguoyun').classList.toggle('active', provider === 'jianguoyun');
+  $('providerOneDrive').classList.toggle('active', provider === 'onedrive');
+  $('jianguoyunPanel').classList.toggle('hidden', provider !== 'jianguoyun');
+  $('oneDrivePanel').classList.toggle('hidden', provider !== 'onedrive');
 }
 
 // ---------- 导航 ----------
@@ -67,16 +96,26 @@ async function loadState() {
   const cfg = state.config;
   const stats = state.stats;
 
+  setProviderUI(cfg.provider);
   $<HTMLInputElement>('baseUrl').value = cfg.baseUrl;
   $<HTMLInputElement>('account').value = cfg.account;
   $<HTMLInputElement>('account').placeholder = cfg.account || 'you@example.com';
-  $<HTMLInputElement>('appPassword').placeholder = cfg.hasCredentials ? '已保存，如需更换请输入新密码' : '坚果云后台生成的应用密码';
+  $<HTMLInputElement>('appPassword').placeholder = cfg.hasJianguoyunCredentials
+    ? '已保存，如需更换请输入新密码'
+    : '坚果云后台生成的应用密码';
+  $<HTMLInputElement>('oneDriveClientId').value = cfg.oneDriveClientId;
+  $('odDirPath').textContent = `/${cfg.oneDriveDir}/`;
   $('deviceName').value = cfg.deviceName;
   $('dirPath').textContent = `/${cfg.dir}/`;
 
-  $('connDot').className = `dot ${cfg.hasCredentials ? 'ok' : ''}`;
-  $('connText').textContent = cfg.hasCredentials
-    ? `已连接 ${cfg.account} · 上次验证 ${fmtRelative(cfg.connectedAt)}`
+  $('connDot').className = `dot ${cfg.hasJianguoyunCredentials ? 'ok' : ''}`;
+  $('connText').textContent = cfg.hasJianguoyunCredentials
+    ? `已连接 ${cfg.account}`
+    : '未连接';
+
+  $('odDot').className = `dot ${cfg.hasOneDriveCredentials ? 'ok' : ''}`;
+  $('odText').textContent = cfg.hasOneDriveCredentials
+    ? `已连接 ${cfg.oneDriveAccount || 'OneDrive'}`
     : '未连接';
 
   const statusMap: Record<string, string> = {
@@ -118,6 +157,144 @@ function renderPreview(p: NonNullable<StateReply['stats']['pendingPreview']>) {
       : '',
   ].join('');
 }
+
+// ---------- 存储服务切换 ----------
+$('providerJianguoyun').addEventListener('click', async () => {
+  if (odDeviceCode) {
+    stopOdPolling();
+    odDeviceCode = '';
+    $('odCodePanel').classList.add('hidden');
+    $('odPollStatus').textContent = '';
+  }
+  const res = await sendMessage({ type: 'SET_PROVIDER', provider: 'jianguoyun' });
+  if (!res.ok) toast(res.error ?? '切换失败', 'error');
+  await loadState();
+});
+
+$('providerOneDrive').addEventListener('click', async () => {
+  const res = await sendMessage({ type: 'SET_PROVIDER', provider: 'onedrive' });
+  if (!res.ok) toastOd(res.error ?? '切换失败', 'error');
+  await loadState();
+});
+
+// ---------- OneDrive 设备代码登录 ----------
+let odTimer: ReturnType<typeof setTimeout> | null = null;
+let odDeviceCode = '';
+let odPollGeneration = 0;
+
+function stopOdPolling() {
+  odPollGeneration += 1;
+  if (odTimer) {
+    clearTimeout(odTimer);
+    odTimer = null;
+  }
+}
+
+function scheduleOdPoll(seconds: number, generation: number) {
+  if (odTimer) clearTimeout(odTimer);
+  odTimer = setTimeout(() => void pollOd(generation), Math.max(3, seconds) * 1000);
+}
+
+async function pollOd(generation: number) {
+  if (generation !== odPollGeneration || !odDeviceCode) return;
+  const res = await sendMessage<{ status: string; interval?: number; account?: string }>({
+    type: 'ONEDRIVE_POLL_AUTH',
+    deviceCode: odDeviceCode,
+  });
+  if (generation !== odPollGeneration) return;
+  if (!res.ok) {
+    $('odPollStatus').textContent = `授权失败：${res.error ?? '未知错误'}`;
+    toastOd(`OneDrive 授权失败：${res.error ?? '未知错误'}`, 'error');
+    stopOdPolling();
+    return;
+  }
+  const status = res.data?.status;
+  if (status === 'pending') {
+    $('odPollStatus').textContent = '等待你在 Microsoft 页面完成授权…';
+    scheduleOdPoll(5, generation);
+    return;
+  }
+  if (status === 'slow_down') {
+    $('odPollStatus').textContent = 'Microsoft 要求放慢轮询，继续等待…';
+    scheduleOdPoll(res.data?.interval ?? 10, generation);
+    return;
+  }
+  if (status === 'ok') {
+    $('odCodePanel').classList.add('hidden');
+    $('odPollStatus').textContent = '';
+    odDeviceCode = '';
+    stopOdPolling();
+    toastOd(`已连接 ${res.data?.account ?? 'OneDrive'}，正在准备首次同步…`);
+    await loadState();
+
+    const sync = await sendMessage<{ needsConfirm?: boolean; summary?: NonNullable<StateReply['stats']['pendingPreview']>; error?: string }>({
+      type: 'SYNC_NOW',
+    });
+    if (!sync.ok) toastOd(`已连接，但同步失败：${sync.error ?? '未知错误'}`, 'error');
+    else if (sync.data?.needsConfirm && sync.data.summary) {
+      renderPreview(sync.data.summary);
+      toastOd('云端已有其他设备，请在上方预览后确认合并。');
+    } else {
+      toastOd('OneDrive 已连接并完成同步。');
+    }
+    await loadState();
+    return;
+  }
+
+  $('odPollStatus').textContent = `未知授权状态：${String(status)}`;
+  stopOdPolling();
+}
+
+$('odConnectBtn').addEventListener('click', async () => {
+  const clientId = $<HTMLInputElement>('oneDriveClientId').value.trim();
+  if (!clientId) {
+    toastOd('请先填写 Entra 应用的 client ID。', 'error');
+    return;
+  }
+  stopOdPolling();
+  odDeviceCode = '';
+  $('odCodePanel').classList.add('hidden');
+  $('odConnectBtn').disabled = true;
+  toastOd('正在向 Microsoft 申请登录代码…');
+  const res = await sendMessage<DeviceCodeStart>({ type: 'ONEDRIVE_BEGIN_AUTH', clientId });
+  $('odConnectBtn').disabled = false;
+  if (!res.ok || !res.data) {
+    toastOd(`获取登录代码失败：${res.error ?? '未知错误'}`, 'error');
+    return;
+  }
+
+  const info = res.data;
+  odDeviceCode = info.deviceCode;
+  $('odUserCode').textContent = info.userCode;
+  $('odVerifyLink').href = info.verificationUri;
+  $('odVerifyLink').textContent = info.verificationUri.replace(/^https?:\/\//, '');
+  $('odCodePanel').classList.remove('hidden');
+  $('odPollStatus').textContent = `代码 ${Math.round(info.expiresIn / 60)} 分钟内有效，等待授权…`;
+  toastOd('已获取登录代码，请按提示在 Microsoft 页面输入。');
+
+  const generation = odPollGeneration;
+  window.open(info.verificationUri, '_blank', 'noopener');
+  scheduleOdPoll(info.interval, generation);
+});
+
+$('odCopyCodeBtn').addEventListener('click', async () => {
+  const code = $('odUserCode').textContent ?? '';
+  try {
+    await navigator.clipboard.writeText(code);
+    toastOd('登录代码已复制。');
+  } catch {
+    toastOd('复制失败，请手动选中代码。', 'error');
+  }
+});
+
+$('odDisconnectBtn').addEventListener('click', async () => {
+  if (!confirm('断开 OneDrive 并清除本机令牌？云端书签不会删除。继续？')) return;
+  stopOdPolling();
+  odDeviceCode = '';
+  await sendMessage({ type: 'ONEDRIVE_DISCONNECT' });
+  await loadState();
+  toastOd('已断开 OneDrive 并清除本机令牌。');
+});
 
 // ---------- 连接 ----------
 $('testBtn').addEventListener('click', async () => {

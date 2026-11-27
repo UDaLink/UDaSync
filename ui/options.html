@@ -14,7 +14,7 @@
           <div class="logo">U</div>
           <div>
             <h1>UDaSync</h1>
-            <p class="tagline">坚果云书签同步</p>
+            <p class="tagline">坚果云 / OneDrive 书签同步</p>
           </div>
         </div>
         <nav>
@@ -26,12 +26,24 @@
           <button class="nav" data-tab="logs">日志</button>
           <button class="nav" data-tab="about">关于</button>
         </nav>
-        <div class="side-foot muted">v0.1.0 · WebDAV</div>
+        <div class="side-foot muted">v0.2.0 · WebDAV / OneDrive</div>
       </aside>
 
       <main>
         <!-- 连接 -->
         <section id="tab-connect" class="tab active">
+          <div class="panel">
+            <h3>存储服务</h3>
+            <div class="provider-switch">
+              <button id="providerJianguoyun" class="provider active">坚果云 WebDAV</button>
+              <button id="providerOneDrive" class="provider">OneDrive</button>
+            </div>
+            <p class="note" style="margin-top: 12px">
+              两个服务二选一。切换不会删除另一边的云端数据；当前服务需要单独连接。
+            </p>
+          </div>
+
+          <div id="jianguoyunPanel">
           <h2>连接坚果云</h2>
           <p class="lead">UDaSync 使用坚果云提供的 WebDAV 服务存取书签，不需要 UDaSync 自己的账号。</p>
 
@@ -80,6 +92,51 @@
               因此云端目录名固定为 ASCII 的 <strong>UDaSync</strong>，请勿改成中文。
             </p>
           </div>
+          </div>
+
+          <div id="oneDrivePanel" class="hidden">
+            <h2>连接 OneDrive</h2>
+            <p class="lead">使用个人 Microsoft 账号，数据只写入 OneDrive 的应用专属文件夹，不读取你的其他文件。</p>
+
+            <div class="panel">
+              <h3>账号信息</h3>
+              <div class="status-line" id="odStatus" style="margin-bottom: 14px">
+                <span class="dot" id="odDot"></span><span id="odText">未连接</span>
+              </div>
+
+              <div class="field">
+                <label for="oneDriveClientId">Entra 应用 client ID</label>
+                <input id="oneDriveClientId" type="text" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+                <p class="note">
+                  在 Entra「应用注册」复制 Application (client) ID。个人账号请选择「仅个人 Microsoft 账户」，
+                  并在 Authentication 里启用 public client flows。client ID 是公开标识，不是密码。
+                </p>
+              </div>
+
+              <div class="actions">
+                <button id="odConnectBtn" class="primary">连接 OneDrive</button>
+                <button id="odDisconnectBtn" class="ghost danger">断开并清除令牌</button>
+              </div>
+              <div id="odMsg" class="note hidden" style="margin-top: 12px"></div>
+
+              <div id="odCodePanel" class="panel hidden" style="margin-top: 14px; background: var(--bg-sub)">
+                <p>在浏览器打开 <a id="odVerifyLink" href="https://microsoft.com/devicelogin" target="_blank" rel="noreferrer">Microsoft 登录页</a>，输入下面的代码：</p>
+                <div class="code" id="odUserCode">----</div>
+                <div class="actions">
+                  <button id="odCopyCodeBtn" class="ghost">复制代码</button>
+                </div>
+                <p class="muted" id="odPollStatus">等待授权…</p>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>云端目录</h3>
+              <p class="muted" style="font-size: 12px">
+                书签快照保存在 OneDrive 应用专属文件夹下的 <code class="mono" id="odDirPath">/UDaSync/</code>。
+                这里的 <code class="mono">devices/</code> 与 <code class="mono">backups/</code> 和坚果云模式结构一致。
+              </p>
+            </div>
+          </div>
         </section>
 
         <!-- 同步 -->
@@ -117,7 +174,7 @@
               把「书签」取消勾选。
             </p>
             <p class="note" style="margin-top: 10px">
-              同一坚果云账号下，建议一台电脑同时只让一个浏览器在线同步；Chrome 与 Edge 都装的话，
+              同一个存储账号下，建议一台电脑同时只让一个浏览器在线同步；Chrome 与 Edge 都装的话，
               两边会各自同步并逐渐趋同，但不要指望它们实时一致。
             </p>
           </div>
@@ -186,7 +243,7 @@
         <!-- 关于 -->
         <section id="tab-about" class="tab">
           <h2>关于 UDaSync</h2>
-          <p class="lead">一个只做一件事的扩展：把你的书签，通过你自己的坚果云，在多台电脑之间同步。</p>
+          <p class="lead">一个只做一件事的扩展：把你的书签，通过你自己的坚果云或 OneDrive，在多台电脑之间同步。</p>
 
           <div class="panel">
             <h3>设计要点</h3>
@@ -194,23 +251,25 @@
               <div class="row"><span>同步范围</span><strong>整棵书签树</strong></div>
               <div class="row"><span>冲突策略</span><strong>后写赢 + 墓碑 30 天 + 云端备份 10 份</strong></div>
               <div class="row"><span>触发方式</span><strong>书签变动 5 秒防抖 + 启动拉取 + 每 10 分钟轮询</strong></div>
-              <div class="row"><span>数据位置</span><strong class="mono">/UDaSync/devices/&lt;设备&gt;.json.gz</strong></div>
+              <div class="row"><span>数据位置（坚果云）</span><strong class="mono">/UDaSync/devices/&lt;设备&gt;.json.gz</strong></div>
+              <div class="row"><span>数据位置（OneDrive）</span><strong class="mono">应用专属文件夹 /UDaSync/devices/&lt;设备&gt;.json.gz</strong></div>
             </div>
           </div>
 
           <div class="panel">
             <h3>隐私</h3>
             <p class="note">
-              UDaSync 不采集任何分析数据、不访问与书签无关的网页。所有网络请求只发往你自己的坚果云 WebDAV 地址
-              （默认 <code class="mono">https://dav.jianguoyun.com/dav/</code>）。书签内容只存在本机与你的坚果云账号里。
+              UDaSync 不采集任何分析数据、不访问与书签无关的网页。网络请求只发往你选择的存储服务：
+              坚果云 WebDAV，或 Microsoft Graph 的 OneDrive 应用专属文件夹。书签内容只存在本机与你的云端账号里。
             </p>
           </div>
 
           <div class="panel">
             <h3>排查建议</h3>
             <p class="note">
-              同步失败时依次检查：① 应用密码是否被吊销；② 坚果云免费版每月 1GB 上行流量是否用尽；
-              ③ 是否触发了 30 分钟 600 次请求限制（等待 30 分钟后自动恢复）；④ 是否有另一台设备正在同时写入。
+              坚果云失败时依次检查：① 应用密码是否被吊销；② 免费版每月 1GB 上行流量是否用尽；
+              ③ 是否触发 30 分钟 600 次请求限制。OneDrive 失败时检查：① client ID 是否填写正确；
+              ② Entra 应用是否启用 public client flows；③ 授权是否已过期或被撤销。
             </p>
           </div>
         </section>

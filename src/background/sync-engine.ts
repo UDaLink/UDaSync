@@ -23,14 +23,17 @@ import type {
   DeviceInfo,
   IdMap,
   LocalItem,
+  OneDriveTokens,
   PlanSummary,
   RecycleEntry,
   Snapshot,
   SyncResult,
   Tombstones,
   TreeNode,
+  UdasynConfig,
 } from '../shared/types';
-import { JianguoyunAdapter } from '../adapters/jianguoyun';
+import { createStorageAdapter } from '../adapters/factory';
+import type { StorageAdapter } from '../adapters/storage-adapter';
 import { applyTarget } from '../core/apply';
 import { fingerprintNodes, buildModel } from '../core/model';
 import { mergeNodes, tombstonesToNodes } from '../core/merge';
@@ -42,13 +45,16 @@ import { log } from '../platform/logger';
 import {
   getConfig,
   getIds,
+  getOneDriveTokens,
   getStats,
   getTombs,
   getUploadedHash,
+  hasCredentials,
   patchStats,
   pushRecycle,
   saveConfig,
   setIds,
+  setOneDriveTokens,
   setTombs,
   setUploadedHash,
 } from '../platform/settings';
@@ -99,18 +105,17 @@ export async function runSync(trigger: SyncTrigger, options: SyncOptions = { app
 
 async function doSync(trigger: SyncTrigger, options: SyncOptions): Promise<SyncResult> {
   const cfg = await getConfig();
-  if (!cfg.account || !cfg.appPassword) {
-    await patchStats({ lastStatus: 'error', lastError: '尚未绑定坚果云账号' });
+  if (!(await hasCredentials(cfg))) {
+    const message = cfg.provider === 'onedrive' ? '尚未连接 OneDrive' : '尚未绑定坚果云账号';
+    await patchStats({ lastStatus: 'error', lastError: message });
     await setBadge('error');
-    return { ok: false, error: '尚未绑定坚果云账号' };
+    return { ok: false, error: message };
   }
   if (cfg.paused && trigger !== 'manual' && trigger !== 'confirm') {
     return { ok: false, error: '同步已暂停' };
   }
 
-  const adapter = new JianguoyunAdapter(cfg.baseUrl, cfg.account, cfg.appPassword, cfg.dir, (level, msg) =>
-    void log(level, msg),
-  );
+  const adapter = await createAdapterForConfig(cfg, (level, msg) => void log(level, msg));
 
   // 1) 连通性 + 目录
   await adapter.ping();
@@ -271,8 +276,24 @@ async function doSync(trigger: SyncTrigger, options: SyncOptions): Promise<SyncR
   return { ok: true, counts, summary, at: now };
 }
 
+async function createAdapterForConfig(
+  cfg: UdasynConfig,
+  onLog: (level: 'info' | 'warn' | 'error', msg: string) => void,
+): Promise<StorageAdapter> {
+  const tokens = cfg.provider === 'onedrive' ? await getOneDriveTokens() : null;
+  if (cfg.provider === 'onedrive' && !tokens?.refreshToken) {
+    throw new Error('尚未连接 OneDrive');
+  }
+  return createStorageAdapter({
+    cfg,
+    oneDriveTokens: tokens,
+    onOneDriveTokens: (next: OneDriveTokens) => setOneDriveTokens(next),
+    onLog,
+  });
+}
+
 /** 云端备份文件：backups/20261126-2130.json.gz，最多留 10 份 */
-async function writeCloudBackup(adapter: JianguoyunAdapter, nodes: BookmarkNode[], now: number): Promise<void> {
+async function writeCloudBackup(adapter: StorageAdapter, nodes: BookmarkNode[], now: number): Promise<void> {
   try {
     await adapter.ensureDir(REMOTE_BACKUPS_DIR);
     const d = new Date(now);
@@ -421,9 +442,7 @@ async function notifyFailure(message: string): Promise<void> {
 /** 供 UI 调用：删除某台设备的云端快照 */
 export async function removeDeviceSnapshot(deviceId: string): Promise<void> {
   const cfg = await getConfig();
-  const adapter = new JianguoyunAdapter(cfg.baseUrl, cfg.account, cfg.appPassword, cfg.dir, (l, m) =>
-    void log(l, m),
-  );
+  const adapter = await createAdapterForConfig(cfg, (l, m) => void log(l, m));
   await adapter.remove(`${REMOTE_DEVICES_DIR}/${deviceId}.json.gz`);
   await log('info', `已移除设备快照 ${deviceId}`);
 }
@@ -431,7 +450,7 @@ export async function removeDeviceSnapshot(deviceId: string): Promise<void> {
 /** 备份文件列表 */
 export async function listBackups(): Promise<Array<{ name: string; lastModified: string | null; size: number }>> {
   const cfg = await getConfig();
-  const adapter = new JianguoyunAdapter(cfg.baseUrl, cfg.account, cfg.appPassword, cfg.dir, () => undefined);
+  const adapter = await createAdapterForConfig(cfg, () => undefined);
   const files = await adapter.list(REMOTE_BACKUPS_DIR);
   return files.filter((f) => f.name.endsWith('.json.gz')).sort((a, b) => b.name.localeCompare(a.name));
 }
@@ -439,9 +458,7 @@ export async function listBackups(): Promise<Array<{ name: string; lastModified:
 /** 从云端备份恢复：把备份里存活的节点“顶”到当前时间，并入本机（不做删除） */
 export async function restoreBackup(name: string): Promise<SyncResult> {
   const cfg = await getConfig();
-  const adapter = new JianguoyunAdapter(cfg.baseUrl, cfg.account, cfg.appPassword, cfg.dir, (l, m) =>
-    void log(l, m),
-  );
+  const adapter = await createAdapterForConfig(cfg, (l, m) => void log(l, m));
   const snapshot = await adapter.readJson<Snapshot>(`${REMOTE_BACKUPS_DIR}/${name}`);
   if (!snapshot?.nodes?.length) return { ok: false, error: '备份文件为空或格式不支持' };
 

@@ -3,7 +3,7 @@
  */
 
 export const APP_NAME = 'UDaSync';
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.2.0';
 export const SCHEMA_VERSION = 1;
 
 /** 坚果云 WebDAV 根地址（只认真实 UTF-8 路径，中文路径在浏览器里会被百分号编码，故目录名必须纯 ASCII） */
@@ -11,6 +11,20 @@ export const DEFAULT_BASE_URL = 'https://dav.jianguoyun.com/dav/';
 export const DEFAULT_REMOTE_DIR = 'UDaSync';
 export const REMOTE_DEVICES_DIR = 'devices';
 export const REMOTE_BACKUPS_DIR = 'backups';
+
+/** OneDrive / Microsoft Graph */
+export const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
+export const ONEDRIVE_AUTH_BASE = 'https://login.microsoftonline.com/consumers/oauth2/v2.0';
+export const ONEDRIVE_SCOPE = 'offline_access Files.ReadWrite.AppFolder User.Read';
+/** 默认目录名；真正的数据位于 OneDrive 的“应用专属文件夹”里 */
+export const DEFAULT_ONEDRIVE_DIR = 'UDaSync';
+/**
+ * 生产分发时在这里填入 UDaLink 的 Entra Application (client) ID。
+ * 留空时，设置页会要求用户填写自己的 client ID；它只是公开的应用标识，不是密码。
+ */
+export const DEFAULT_ONEDRIVE_CLIENT_ID = '';
+/** Graph 单个请求失败后的重试次数 */
+export const ONEDRIVE_MAX_RETRIES = 2;
 
 /** 书签变动后的合并窗口：攒 5 秒再同步一次，避免连续编辑打爆请求数 */
 export const CHANGE_DEBOUNCE_MS = 5000;
@@ -73,4 +87,5 @@ export const STORAGE_KEYS = {
   recycle: 'recycle',
   uploadedHash: 'uploadHash',
   applyLock: 'applyLock',
+  oneDriveAuth: 'oneDriveAuth',
 } as const;

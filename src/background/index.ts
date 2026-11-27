@@ -10,8 +10,9 @@ import {
   POLL_PERIOD_MINUTES,
   STORAGE_KEYS,
 } from '../shared/constants';
-import type { SyncResult } from '../shared/types';
+import type { DeviceCodeInfo, StorageProvider, SyncResult } from '../shared/types';
 import { WebDavClient } from '../adapters/webdav';
+import { pollDeviceCode, startDeviceCode } from '../adapters/onedrive-auth';
 import { setBadge } from '../platform/badge';
 import { log } from '../platform/logger';
 import {
@@ -19,11 +20,15 @@ import {
   getConfig,
   getIds,
   getLogs,
+  getOneDriveTokens,
   getRecycle,
   getStats,
+  hasCredentials,
   patchStats,
   saveConfig,
+  setOneDriveTokens,
   setRecycle,
+  setUploadedHash,
 } from '../platform/settings';
 import { ROOT_BAR } from '../shared/constants';
 import {
@@ -49,7 +54,7 @@ function scheduleSync(reason: 'auto', delayMs = CHANGE_DEBOUNCE_MS): void {
         return;
       }
       const cfg = await getConfig();
-      if (cfg.paused || !cfg.account || !cfg.appPassword) return;
+      if (cfg.paused || !(await hasCredentials(cfg))) return;
       const result = await runSync('auto', { apply: true });
       if (!result.ok && !result.needsConfirm) {
         // 失败交给轮询/重试闹钟，不在这里重排
@@ -71,7 +76,7 @@ async function syncFromAlarm(name: string): Promise<void> {
   if (await isApplyLocked()) return;
   if (await isSyncing()) return;
   const cfg = await getConfig();
-  if (cfg.paused || !cfg.account || !cfg.appPassword) return;
+  if (cfg.paused || !(await hasCredentials(cfg))) return;
   if (!cfg.firstRunDone) return; // 首次必须由用户确认
   const stats = await getStats();
   if (stats.consecutiveFailures > 0) {
@@ -96,7 +101,7 @@ chrome.runtime.onStartup.addListener(() => {
   void ensureAlarms();
   void (async () => {
     const cfg = await getConfig();
-    if (cfg.account && cfg.appPassword && cfg.firstRunDone && !cfg.paused) {
+    if ((await hasCredentials(cfg)) && cfg.firstRunDone && !cfg.paused) {
       await runSync('startup', { apply: true });
     }
   })();
@@ -149,6 +154,29 @@ async function handleMessage(msg: Msg): Promise<unknown> {
       return testConnection(msg);
     case 'SAVE_CONFIG':
       return saveConnection(msg);
+    case 'SET_PROVIDER': {
+      const provider = String(msg.provider ?? '') as StorageProvider;
+      if (provider !== 'jianguoyun' && provider !== 'onedrive') {
+        return { ok: false, error: '未知的存储服务' };
+      }
+      const cfg = await getConfig();
+      if (cfg.provider !== provider) {
+        await saveConfig({ provider, firstRunDone: false, connectedAt: null });
+        await setUploadedHash(null);
+        await patchStats({ lastStatus: 'idle', pendingPreview: null, devices: [] });
+      }
+      return { ok: true };
+    }
+    case 'ONEDRIVE_BEGIN_AUTH':
+      return beginOneDriveAuth(msg);
+    case 'ONEDRIVE_POLL_AUTH':
+      return pollOneDriveAuth(msg);
+    case 'ONEDRIVE_DISCONNECT':
+      await clearCredentials('onedrive');
+      await setUploadedHash(null);
+      await setBadge('ok');
+      await patchStats({ lastStatus: 'idle', pendingPreview: null, devices: [] });
+      return { ok: true };
     case 'SYNC_NOW': {
       const cfg = await getConfig();
       const result = await runSync('manual', { apply: true });
@@ -190,11 +218,14 @@ async function handleMessage(msg: Msg): Promise<unknown> {
     case 'CLEAR_LOGS':
       await chrome.storage.local.set({ [STORAGE_KEYS.logs]: [] });
       return { ok: true };
-    case 'DISCONNECT':
-      await clearCredentials();
+    case 'DISCONNECT': {
+      const cfg = await getConfig();
+      await clearCredentials(cfg.provider);
+      await setUploadedHash(null);
       await setBadge('ok');
       await patchStats({ lastStatus: 'idle', pendingPreview: null, devices: [] });
       return { ok: true };
+    }
     case 'OPEN_OPTIONS':
       await chrome.runtime.openOptionsPage();
       return { ok: true };
@@ -206,22 +237,69 @@ async function handleMessage(msg: Msg): Promise<unknown> {
 async function getState() {
   const cfg = await getConfig();
   const stats = await getStats();
+  const oneDriveTokens = await getOneDriveTokens();
   return {
     ok: true,
     config: {
+      provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       account: cfg.account,
       dir: cfg.dir,
+      oneDriveClientId: cfg.oneDriveClientId,
+      oneDriveAccount: cfg.oneDriveAccount,
+      oneDriveDir: cfg.oneDriveDir,
       deviceId: cfg.deviceId,
       deviceName: cfg.deviceName,
       paused: cfg.paused,
       firstRunDone: cfg.firstRunDone,
       connectedAt: cfg.connectedAt,
-      hasCredentials: Boolean(cfg.account && cfg.appPassword),
+      hasCredentials: await hasCredentials(cfg),
+      hasJianguoyunCredentials: Boolean(cfg.account && cfg.appPassword),
+      hasOneDriveCredentials: Boolean(oneDriveTokens?.refreshToken),
     },
     stats,
     syncing: isSyncing(),
   };
+}
+
+async function beginOneDriveAuth(msg: Msg) {
+  const cfg = await getConfig();
+  const clientId = String(msg.clientId ?? cfg.oneDriveClientId).trim();
+  if (!clientId) return { ok: false, error: '请先填写 OneDrive 的 Entra client ID' };
+  try {
+    const info: DeviceCodeInfo = await startDeviceCode(clientId);
+    await saveConfig({ oneDriveClientId: clientId });
+    return { ok: true, ...info };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function pollOneDriveAuth(msg: Msg) {
+  const cfg = await getConfig();
+  const clientId = cfg.oneDriveClientId.trim();
+  const deviceCode = String(msg.deviceCode ?? '');
+  if (!clientId) return { ok: false, error: 'OneDrive client ID 已丢失，请重新开始连接' };
+  if (!deviceCode) return { ok: false, error: 'OneDrive 登录代码为空' };
+  try {
+    const result = await pollDeviceCode(clientId, deviceCode);
+    if (result.status === 'pending') return { ok: true, status: 'pending' };
+    if (result.status === 'slow_down') return { ok: true, status: 'slow_down', interval: result.interval };
+
+    await setOneDriveTokens(result.tokens);
+    await saveConfig({
+      provider: 'onedrive',
+      oneDriveAccount: result.tokens.account,
+      connectedAt: Date.now(),
+      firstRunDone: false,
+    });
+    await setUploadedHash(null);
+    await setBadge('ok');
+    await patchStats({ lastStatus: 'idle', pendingPreview: null, devices: [] });
+    return { ok: true, status: 'ok', account: result.tokens.account };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 async function testConnection(msg: Msg) {
@@ -254,8 +332,10 @@ async function saveConnection(msg: Msg): Promise<SyncResult> {
     return { ok: false, error: '云端目录只能是 ASCII 字母、数字、点、下划线和短横线（坚果云不支持中文路径）' };
   }
 
-  const changed = account !== cfg.account || appPassword !== cfg.appPassword || dir !== cfg.dir;
+  const changed = cfg.provider !== 'jianguoyun' || account !== cfg.account || appPassword !== cfg.appPassword || dir !== cfg.dir;
+  if (changed) await setUploadedHash(null);
   await saveConfig({
+    provider: 'jianguoyun',
     baseUrl,
     account,
     appPassword,

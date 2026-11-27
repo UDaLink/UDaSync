@@ -2,8 +2,11 @@ import { sendMessage } from './common';
 
 interface State {
   config: {
+    provider: 'jianguoyun' | 'onedrive';
     account: string;
+    oneDriveAccount: string;
     dir: string;
+    oneDriveDir: string;
     deviceName: string;
     paused: boolean;
     firstRunDone: boolean;
@@ -48,7 +51,10 @@ async function refresh() {
   const state = await sendMessage<State>({ type: 'GET_STATE' });
   if (!state?.ok) return;
   const s = state.data;
-  $('device').textContent = `${s.config.deviceName} · ${s.config.dir}`;
+  const providerLabel = s.config.provider === 'onedrive' ? 'OneDrive' : '坚果云';
+  const account = s.config.provider === 'onedrive' ? s.config.oneDriveAccount : s.config.account;
+  const dir = s.config.provider === 'onedrive' ? s.config.oneDriveDir : s.config.dir;
+  $('device').textContent = `${s.config.deviceName} · ${providerLabel}${account ? ` · ${account}` : ''} · ${dir}`;
 
   if (!s.config.hasCredentials) {
     $('bound').classList.add('hidden');

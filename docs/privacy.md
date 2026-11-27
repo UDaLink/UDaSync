@@ -1,16 +1,17 @@
 # 隐私说明
 
-UDaSync 不收集、不上报、不出售任何用户数据。所有同步数据只在你的浏览器与本机配置的 WebDAV 服务器（默认坚果云）之间传输。
+UDaSync 不收集、不上报、不出售任何用户数据。所有同步数据只在你的浏览器与本机配置的存储服务（坚果云 WebDAV 或 Microsoft OneDrive）之间传输。
 
 ## 1. 处理哪些数据
 
 | 数据 | 用途 | 存放位置 |
 | --- | --- | --- |
-| 书签标题、网址、文件夹层级与顺序 | 同步的唯一对象 | 本机浏览器 + 你的坚果云 `/dav/UDaSync/` |
+| 书签标题、网址、文件夹层级与顺序 | 同步的唯一对象 | 本机浏览器 + 你选择的云盘 |
 | 坚果云账号、应用密码 | WebDAV 认证 | 本机 `chrome.storage.local` |
+| OneDrive client ID、access/refresh token、账号标识 | Graph 认证 | 本机 `chrome.storage.local`；client ID 会写入配置 |
 | 设备 ID、设备名 | 区分多台设备的快照 | 本机 + 云端快照元数据 |
 | 同步日志、回收站 | 排错与误删恢复 | 本机 `chrome.storage.local` |
-| 云端备份 | 回滚 | 你的坚果云 `/dav/UDaSync/backups/` |
+| 云端备份 | 回滚 | 坚果云 `/dav/UDaSync/backups/` 或 OneDrive `Apps/UDaSync/backups/` |
 
 不处理：网页内容、浏览历史、Cookie、密码、表单数据、地理位置、剪贴板。
 
@@ -22,7 +23,10 @@ UDaSync 不收集、不上报、不出售任何用户数据。所有同步数据
 | `storage` | 保存账号配置、设备 ID、UUID 映射、墓碑、日志、回收站 |
 | `alarms` | 每 10 分钟轮询云端变更 |
 | `notifications` | 连续同步失败时提醒用户 |
-| `host_permissions: https://dav.jianguoyun.com/*` | 访问坚果云 WebDAV；不访问其他域名 |
+| `host_permissions: https://dav.jianguoyun.com/*` | 访问坚果云 WebDAV |
+| `host_permissions: https://graph.microsoft.com/*` | 访问 OneDrive 文件与应用专属文件夹 |
+| `host_permissions: https://login.microsoftonline.com/*` | OneDrive 设备代码登录与 token 刷新 |
+| `host_permissions: https://*.1drv.com/*`、`https://*.sharepoint.com/*` | 跟随 Graph 302 到 OneDrive 预签名下载地址 |
 
 扩展不包含 content script，不注入任何网页，不读取页面内容。
 
@@ -31,17 +35,22 @@ UDaSync 不收集、不上报、不出售任何用户数据。所有同步数据
 ```
 浏览器书签 ──▶ 扩展（本机）──HTTPS/Basic Auth──▶ 你的坚果云 WebDAV
                     │
+                    ├──HTTPS/Bearer token──▶ Microsoft Graph（OneDrive 应用专属文件夹）
+                    │
                     └─▶ chrome.storage.local（仅本机）
 ```
 
 - 没有中转服务器，没有遥测端点，没有第三方 SDK
-- 凭证仅用于 `Authorization: Basic` 请求头，不写入日志、不进入快照
-- 云端快照包含书签内容，若你的坚果云账号共享给他人，对方可读取这些文件
+- 坚果云凭证仅用于 `Authorization: Basic` 请求头；OneDrive 使用 Bearer token
+- 凭证不写入日志、不进入快照
+- 云端快照包含书签内容，若云盘账号共享给他人，对方可读取这些文件
+- OneDrive 的 `Files.ReadWrite.AppFolder` 权限只覆盖 `Apps/UDaSync/`，不包括其他网盘文件
 
 ## 4. 保留与删除
 
 - 本机：卸载扩展即删除 `chrome.storage.local` 中的数据；书签本身仍保留在浏览器
-- 云端：删除 `/dav/UDaSync/` 下的文件即可；建议先在设置页「设备」移除设备
+- 坚果云：删除 `/dav/UDaSync/` 下的文件即可；建议先在设置页「设备」移除设备
+- OneDrive：删除 `Apps/UDaSync/` 文件夹即可；断开连接只清除本机 token，不会删除云端文件
 - 墓碑：保留 30 天后不再上传
 - 回收站：保留 7 天或最多 300 条
 - 云端备份：最多 10 份，按时间淘汰
@@ -49,9 +58,10 @@ UDaSync 不收集、不上报、不出售任何用户数据。所有同步数据
 ## 5. 安全建议
 
 1. 使用坚果云**应用密码**而非登录密码，泄露时可单独吊销
-2. 不要把应用密码写进代码仓库、截图或聊天记录
-3. 共用电脑时依赖操作系统账户隔离；v2 计划提供本地口令加密
-4. 定期在坚果云「第三方应用授权」中检查并清理不再使用的应用密码
+2. 不要把手动填写的 client ID 与应用密码写进代码仓库、截图或聊天记录
+3. OneDrive 授权只给 `Files.ReadWrite.AppFolder` + `User.Read`，不要给 `Files.ReadWrite.All`
+4. 共用电脑时依赖操作系统账户隔离；v2 计划提供本地口令加密
+5. 定期在坚果云「第三方应用授权」中检查并清理不再使用的应用密码
 
 ## 6. 合规声明
 

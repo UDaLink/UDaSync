@@ -2,6 +2,8 @@
 
 import {
   DEFAULT_BASE_URL,
+  DEFAULT_ONEDRIVE_CLIENT_ID,
+  DEFAULT_ONEDRIVE_DIR,
   DEFAULT_REMOTE_DIR,
   RECYCLE_MAX,
   RECYCLE_TTL_MS,
@@ -10,7 +12,9 @@ import {
 import type {
   IdMap,
   LogEntry,
+  OneDriveTokens,
   RecycleEntry,
+  StorageProvider,
   SyncStats,
   Tombstones,
   UdasynConfig,
@@ -40,18 +44,25 @@ function detectDeviceName(): string {
 export async function getConfig(): Promise<UdasynConfig> {
   const stored = await chrome.storage.local.get(STORAGE_KEYS.config);
   const cfg = stored[STORAGE_KEYS.config] as Partial<UdasynConfig> | undefined;
+  const provider: StorageProvider = cfg?.provider === 'onedrive' ? 'onedrive' : 'jianguoyun';
   const merged: UdasynConfig = {
+    provider,
     baseUrl: cfg?.baseUrl ?? DEFAULT_BASE_URL,
     account: cfg?.account ?? '',
     appPassword: cfg?.appPassword ?? '',
     dir: cfg?.dir ?? DEFAULT_REMOTE_DIR,
+    oneDriveClientId: cfg?.oneDriveClientId ?? DEFAULT_ONEDRIVE_CLIENT_ID,
+    oneDriveAccount: cfg?.oneDriveAccount ?? '',
+    oneDriveDir: cfg?.oneDriveDir ?? DEFAULT_ONEDRIVE_DIR,
     deviceId: cfg?.deviceId ?? uuid(),
     deviceName: cfg?.deviceName ?? detectDeviceName(),
     paused: cfg?.paused ?? false,
     firstRunDone: cfg?.firstRunDone ?? false,
     connectedAt: cfg?.connectedAt ?? null,
   };
-  if (!cfg || !cfg.deviceId) await chrome.storage.local.set({ [STORAGE_KEYS.config]: merged });
+  if (!cfg || !cfg.deviceId || cfg.provider !== provider) {
+    await chrome.storage.local.set({ [STORAGE_KEYS.config]: merged });
+  }
   return merged;
 }
 
@@ -62,11 +73,52 @@ export async function saveConfig(patch: Partial<UdasynConfig>): Promise<UdasynCo
   return next;
 }
 
-export async function clearCredentials(): Promise<void> {
+export async function clearCredentials(provider?: StorageProvider): Promise<void> {
   const cur = await getConfig();
+  const target = provider ?? cur.provider;
+  if (target === 'onedrive') {
+    await chrome.storage.local.remove(STORAGE_KEYS.oneDriveAuth);
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.config]: {
+        ...cur,
+        oneDriveAccount: '',
+        connectedAt: null,
+        firstRunDone: false,
+      },
+    });
+    return;
+  }
   await chrome.storage.local.set({
-    [STORAGE_KEYS.config]: { ...cur, account: '', appPassword: '', connectedAt: null, firstRunDone: false },
+    [STORAGE_KEYS.config]: {
+      ...cur,
+      account: '',
+      appPassword: '',
+      connectedAt: null,
+      firstRunDone: false,
+    },
   });
+}
+
+export async function getOneDriveTokens(): Promise<OneDriveTokens | null> {
+  const stored = await chrome.storage.local.get(STORAGE_KEYS.oneDriveAuth);
+  return (stored[STORAGE_KEYS.oneDriveAuth] as OneDriveTokens | undefined) ?? null;
+}
+
+export async function setOneDriveTokens(tokens: OneDriveTokens | null): Promise<void> {
+  if (!tokens) {
+    await chrome.storage.local.remove(STORAGE_KEYS.oneDriveAuth);
+    return;
+  }
+  await chrome.storage.local.set({ [STORAGE_KEYS.oneDriveAuth]: tokens });
+}
+
+export async function hasCredentials(cfg?: UdasynConfig): Promise<boolean> {
+  const cur = cfg ?? (await getConfig());
+  if (cur.provider === 'onedrive') {
+    const tokens = await getOneDriveTokens();
+    return Boolean(tokens?.refreshToken);
+  }
+  return Boolean(cur.account && cur.appPassword);
 }
 
 export async function getIds(): Promise<IdMap> {

@@ -1,8 +1,8 @@
 {
   "name": "udasyn",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "UDaSync - 基于坚果云 WebDAV 的浏览器书签同步扩展",
+  "description": "UDaSync - 基于坚果云 WebDAV 或 OneDrive 的浏览器书签同步扩展",
   "license": "MIT",
   "author": "UDaLink",
   "repository": {
@@ -19,6 +19,8 @@
     "edge-extension",
     "webdav",
     "jianguoyun",
+    "onedrive",
+    "microsoft-graph",
     "sync"
   ],
   "engines": {

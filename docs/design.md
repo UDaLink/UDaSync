@@ -5,16 +5,15 @@
 **目标**
 
 - Chrome / Edge（Manifest V3）共用一套代码，同步整棵书签树，保留文件夹层级与顺序
-- 存储完全落在用户自己的坚果云 WebDAV，无自建服务端、无账号体系
+- 支持两种存储：坚果云 WebDAV 与个人 Microsoft OneDrive（Graph 应用专属文件夹）
 - 多设备自动合并：新增、改名、移动、删除均传播；冲突后写赢；误删可恢复
 - 首次绑定安全：先预览后写盘，并保留本机原树备份
 - 失败可诊断：结构化日志、状态角标、失败通知
 
 **非目标（v1）**
 
-- OneDrive 适配（接口已预留，见 §9）
-- favicon、书签访问统计、浏览器自带同步的替代品
 - 团队共享书签、权限管理
+- favicon、书签访问统计、浏览器自带同步的替代品
 
 ## 2. 总体架构
 
@@ -28,7 +27,7 @@
                                            │              │
                                   chrome.bookmarks   StorageAdapter
                                            │              │
-                                     本地书签树      WebDAV (坚果云)
+                                     本地书签树      坚果云 WebDAV / OneDrive Graph
 ```
 
 分层原则：
@@ -63,6 +62,8 @@ type BookmarkNode = {
 
 ## 4. 云端布局
 
+坚果云：
+
 ```
 /dav/UDaSync/
 ├─ devices/
@@ -71,6 +72,16 @@ type BookmarkNode = {
 └─ backups/
    └─ 2026-11-26T14-30-00-000Z.json.gz   # 最多保留 10 份
 ```
+
+OneDrive（Graph 应用专属文件夹）：
+
+```
+/me/drive/special/approot:/UDaSync/
+├─ devices/<deviceId>.json.gz
+└─ backups/<时间戳>.json.gz
+```
+
+两种存储的目录结构、快照格式完全一致，切换 provider 时同步引擎不需要改合并逻辑。
 
 快照结构：
 
@@ -180,7 +191,7 @@ type Snapshot = {
 - 落盘部分失败：记录已完成的 apply 步骤，下一次同步按 diff 继续收敛（幂等）
 - 快照解析失败：跳过该设备并告警，不阻塞其他设备
 
-## 9. 存储适配层（为 OneDrive 预留）
+## 9. 存储适配层
 
 ```ts
 interface StorageAdapter {
@@ -193,19 +204,32 @@ interface StorageAdapter {
 }
 ```
 
-OneDrive 接入时新增 `adapters/onedrive.ts`，用 Microsoft Graph：
+- `src/adapters/jianguoyun.ts`：WebDAV + 坚果云请求预算
+- `src/adapters/onedrive.ts`：Microsoft Graph
+- `src/adapters/onedrive-auth.ts`：OAuth 设备代码流与 token 刷新
+- `src/adapters/factory.ts`：按 `config.provider` 构造对应适配器
+- `src/background/sync-engine.ts` 只依赖 `StorageAdapter`，设备快照、备份、恢复都不再绑定坚果云
+
+OneDrive Graph：
 
 - 目录：`/me/drive/special/approot:/UDaSync`
 - 上传：`PUT /me/drive/special/approot:/UDaSync/devices/<id>.json.gz:/content`
 - 列表：`GET /me/drive/special/approot:/UDaSync/devices:/children`
-- 认证：OAuth2 + PKCE，`chrome.identity.launchWebAuthFlow`
+- 下载：`GET ...:/content`，跟随 302 到 `*.1drv.com` 预签名地址
+- 认证：OAuth2 **设备代码流**，`https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode` 与 `/token`
+- Scope：`offline_access Files.ReadWrite.AppFolder User.Read`
+- `Files.ReadWrite.AppFolder` 只能访问应用专属文件夹，不申请 `Files.ReadWrite.All`
+- 设备代码流不需要 redirect URI，因此不受“加载已解压扩展”时扩展 ID 随目录变化的影响；代价是用户需要在 Microsoft 页面输入一次代码
+- token 过期用 refresh token 自动刷新；刷新后的 token 由 `onTokens` 回写 `chrome.storage.local`
+- 401 强制刷新一次；429 按 `Retry-After` 退避；5xx 重试一次
 
-界面层的"存储服务"选择器已经在设置页预留位置（v1 仅坚果云可选）。
+界面层的「存储服务」选择器在设置页；`provider` 存在 `UdasynConfig`，默认 `jianguoyun`。
 
 ## 10. 安全模型
 
-- 凭证只存 `chrome.storage.local`，仅在请求头 `Authorization: Basic` 中使用
-- 不向任何第三方域名发请求；`host_permissions` 仅 `https://dav.jianguoyun.com/*`
+- 凭证只存 `chrome.storage.local`：坚果云用 Basic Auth；OneDrive 只存 refresh token / access token
+- 不向任何第三方域名发请求；`host_permissions` 仅坚果云 WebDAV、Microsoft Graph/登录、OneDrive 下载域名
+- OneDrive 只申请 `Files.ReadWrite.AppFolder`，看不到应用专属文件夹之外的内容
 - 扩展无 content script，不读取网页内容
 - 建议为坚果云单独生成应用密码（可随时吊销），不要使用登录密码
 - 若设备共用，依赖操作系统账户隔离；v2 可加本地口令（PBKDF2 + AES-GCM）

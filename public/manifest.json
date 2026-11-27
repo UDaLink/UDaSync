@@ -1,11 +1,17 @@
 {
   "manifest_version": 3,
   "name": "UDaSync — 书签同步",
-  "version": "0.1.0",
-  "description": "用坚果云 WebDAV 在多台电脑、多个浏览器之间同步书签。",
+  "version": "0.2.0",
+  "description": "用坚果云 WebDAV 或 OneDrive 在多台电脑、多个浏览器之间同步书签。",
   "minimum_chrome_version": "116",
   "permissions": ["bookmarks", "storage", "alarms", "notifications"],
-  "host_permissions": ["https://dav.jianguoyun.com/*"],
+  "host_permissions": [
+    "https://dav.jianguoyun.com/*",
+    "https://graph.microsoft.com/*",
+    "https://login.microsoftonline.com/*",
+    "https://*.1drv.com/*",
+    "https://*.sharepoint.com/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
